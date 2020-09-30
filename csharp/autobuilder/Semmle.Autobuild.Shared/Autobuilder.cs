@@ -305,6 +305,6 @@ namespace Semmle.Autobuild.Shared
         /// an <code>odasa --index</code>, unless indexing has been disabled, in which case
         /// <paramref name="cmd"/> is run directly.
         /// </summary>
-        public CommandBuilder MaybeIndex(CommandBuilder builder, string cmd) => Options.Indexing && !(Odasa is null) ? builder.IndexCommand(Odasa, cmd) : builder.RunCommand(cmd);
+        public CommandBuilder MaybeIndex(CommandBuilder builder, string cmd) => builder.RunCommand(cmd);
     }
 }
