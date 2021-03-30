@@ -88,6 +88,7 @@ private module Frameworks {
   private import semmle.code.java.security.LdapInjection
   private import semmle.code.java.security.XPath
   private import semmle.code.java.security.JexlInjection
+  private import semmle.code.java.frameworks.spring.SpringHttp
 }
 
 private predicate sourceModelCsv(string row) {
