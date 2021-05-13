@@ -11,6 +11,7 @@ import semmle.code.java.frameworks.spring.SpringCache
 import semmle.code.java.frameworks.spring.SpringComponentScan
 import semmle.code.java.frameworks.spring.SpringConstructorArg
 import semmle.code.java.frameworks.spring.SpringController
+import semmle.code.java.frameworks.spring.SpringDataRepository
 import semmle.code.java.frameworks.spring.SpringDescription
 import semmle.code.java.frameworks.spring.SpringEntry
 import semmle.code.java.frameworks.spring.SpringFlex
