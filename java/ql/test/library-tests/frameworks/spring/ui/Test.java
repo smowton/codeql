@@ -36,56 +36,56 @@ public class Test {
 		{
 			// "org.springframework.ui;ConcurrentModel;false;putAll;;;MapKey of Argument[0];MapKey of Argument[-1];value"
 			ConcurrentModel out = null;
-			Map<? extends String,?> in = (Map<? extends String,?>)newWithMapKey(source());
+			Map in = (Map)newWithMapKey(source());
 			out.putAll(in);
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;ConcurrentModel;false;putAll;;;MapValue of Argument[0];MapValue of Argument[-1];value"
 			ConcurrentModel out = null;
-			Map<? extends String,?> in = (Map<? extends String,?>)newWithMapValue(source());
+			Map in = (Map)newWithMapValue(source());
 			out.putAll(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;addAllAttributes;(Collection);;Element of Argument[0];MapValue of Argument[-1];value"
 			Model out = null;
-			Collection<?> in = (Collection<?>)newWithElement(source());
+			Collection in = (Collection)newWithElement(source());
 			out.addAllAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;addAllAttributes;(Collection);;Element of Argument[0];MapValue of Argument[-1];value"
 			ConcurrentModel out = null;
-			Collection<?> in = (Collection<?>)newWithElement(source());
+			Collection in = (Collection)newWithElement(source());
 			out.addAllAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;addAllAttributes;(Map);;MapKey of Argument[0];MapKey of Argument[-1];value"
 			Model out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapKey(source());
+			Map in = (Map)newWithMapKey(source());
 			out.addAllAttributes(in);
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;addAllAttributes;(Map);;MapKey of Argument[0];MapKey of Argument[-1];value"
 			ConcurrentModel out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapKey(source());
+			Map in = (Map)newWithMapKey(source());
 			out.addAllAttributes(in);
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;addAllAttributes;(Map);;MapValue of Argument[0];MapValue of Argument[-1];value"
 			Model out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapValue(source());
+			Map in = (Map)newWithMapValue(source());
 			out.addAllAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;addAllAttributes;(Map);;MapValue of Argument[0];MapValue of Argument[-1];value"
 			ConcurrentModel out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapValue(source());
+			Map in = (Map)newWithMapValue(source());
 			out.addAllAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
@@ -133,28 +133,28 @@ public class Test {
 		}
 		{
 			// "org.springframework.ui;Model;true;asMap;;;MapKey of Argument[-1];MapKey of ReturnValue;value"
-			Map<String,Object> out = null;
+			Map out = null;
 			Model in = (Model)newWithMapKey(source());
 			out = in.asMap();
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;asMap;;;MapKey of Argument[-1];MapKey of ReturnValue;value"
-			Map<String,Object> out = null;
+			Map out = null;
 			ConcurrentModel in = (ConcurrentModel)newWithMapKey(source());
 			out = in.asMap();
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;asMap;;;MapValue of Argument[-1];MapValue of ReturnValue;value"
-			Map<String,Object> out = null;
+			Map out = null;
 			Model in = (Model)newWithMapValue(source());
 			out = in.asMap();
 			sink(getMapValue(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;asMap;;;MapValue of Argument[-1];MapValue of ReturnValue;value"
-			Map<String,Object> out = null;
+			Map out = null;
 			ConcurrentModel in = (ConcurrentModel)newWithMapValue(source());
 			out = in.asMap();
 			sink(getMapValue(out)); // $hasValueFlow
@@ -176,28 +176,28 @@ public class Test {
 		{
 			// "org.springframework.ui;Model;true;mergeAttributes;(Map);;MapKey of Argument[0];MapKey of Argument[-1];value"
 			Model out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapKey(source());
+			Map in = (Map)newWithMapKey(source());
 			out.mergeAttributes(in);
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;mergeAttributes;(Map);;MapKey of Argument[0];MapKey of Argument[-1];value"
 			ConcurrentModel out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapKey(source());
+			Map in = (Map)newWithMapKey(source());
 			out.mergeAttributes(in);
 			sink(getMapKey(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;mergeAttributes;(Map);;MapValue of Argument[0];MapValue of Argument[-1];value"
 			Model out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapValue(source());
+			Map in = (Map)newWithMapValue(source());
 			out.mergeAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
 		{
 			// "org.springframework.ui;Model;true;mergeAttributes;(Map);;MapValue of Argument[0];MapValue of Argument[-1];value"
 			ConcurrentModel out = null;
-			Map<String,?> in = (Map<String,?>)newWithMapValue(source());
+			Map in = (Map)newWithMapValue(source());
 			out.mergeAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
@@ -239,7 +239,7 @@ public class Test {
 		{
 			// "org.springframework.ui;ModelMap;false;addAllAttributes;(Collection);;Element of Argument[0];MapValue of Argument[-1];value"
 			ModelMap out = null;
-			Collection<?> in = (Collection<?>)newWithElement(source());
+			Collection in = (Collection)newWithElement(source());
 			out.addAllAttributes(in);
 			sink(getMapValue(out)); // $hasValueFlow
 		}
