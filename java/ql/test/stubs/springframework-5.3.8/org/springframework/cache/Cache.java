@@ -18,6 +18,7 @@ package org.springframework.cache;
 
 import java.util.concurrent.Callable;
 
+import org.springframework.lang.Nullable;
 
 public interface Cache {
 	String getName();
