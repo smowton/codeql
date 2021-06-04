@@ -1,7 +1,6 @@
 import java.io.IOException;
 import javax.management.remote.JMXConnectorServerFactory;
-
-// import javax.management.remote.rmi.RMIConnectorServer; Importing this throws an error, therefore we can't test this
+import javax.management.remote.rmi.RMIConnectorServer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -15,7 +14,7 @@ public class InsecureRmiJmxEnvironmentConfiguration {
 
   public void initInsecureRmiDueToNullEnv() throws IOException {
     // Bad initializing env (arg1) with null
-    // new RMIConnectorServer(null, null, null, null); Importing this throws an error, therefore we can't test this
+    new RMIConnectorServer(null, null, null, null);
   }
 
   public void initInsecureRmiDueToMissingEnvKeyValue() throws IOException {
@@ -23,7 +22,7 @@ public class InsecureRmiJmxEnvironmentConfiguration {
     // "jmx.remote.rmi.server.credential.types"
     Map<String, Object> env = new HashMap<>();
     env.put("jmx.remote.x.daemon", "true");
-    // new RMIConnectorServer(null, env, null, null); Importing this throws an error, therefore we can't test this
+    new RMIConnectorServer(null, env, null, null);
   }
 
   public void initInsecureJmxDueToMissingEnvKeyValue() throws IOException {
@@ -49,14 +48,14 @@ public class InsecureRmiJmxEnvironmentConfiguration {
     env.put("jmx.remote.x.daemon", "true");
     env.put("jmx.remote.rmi.server.credential.types",
         new String[] { String[].class.getName(), String.class.getName() });
-    // new RMIConnectorServer(null, env, null, null); Importing this throws an error, therefore we can't test this
+    new RMIConnectorServer(null, env, null, null);
   }
 
   public void secureeJmxConnectorServerConstants() throws IOException {
     // Good
     Map<String, Object> env = new HashMap<>();
     env.put("jmx.remote.x.daemon", "true");
-    env.put("RMIConnectorServer.SERIAL_FILTER_PATTERN",
+    env.put(RMIConnectorServer.SERIAL_FILTER_PATTERN,
         new String[] { String[].class.getName(), String.class.getName() });
     JMXConnectorServerFactory.newJMXConnectorServer(null, env, null);
   }
@@ -64,8 +63,8 @@ public class InsecureRmiJmxEnvironmentConfiguration {
     // Good
     Map<String, Object> env = new HashMap<>();
     env.put("jmx.remote.x.daemon", "true");
-    env.put("RMIConnectorServer.SERIAL_FILTER_PATTERN",
+    env.put(RMIConnectorServer.SERIAL_FILTER_PATTERN,
         new String[] { String[].class.getName(), String.class.getName() });
-    // new RMIConnectorServer(null, env, null, null); Importing this throws an error, therefore we can't test this
+    new RMIConnectorServer(null, env, null, null);
   }
 }
