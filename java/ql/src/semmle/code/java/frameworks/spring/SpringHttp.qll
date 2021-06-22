@@ -65,7 +65,7 @@ private class SpringHttpFlowStep extends SummaryModelCsv {
         "org.springframework.http;ResponseEntity;true;ResponseEntity;(Object,MultiValueMap,int);;Argument[0];Argument[-1];taint",
         "org.springframework.http;ResponseEntity;true;ResponseEntity;(Object,MultiValueMap,int);;MapKey of Argument[1];Argument[-1];taint",
         "org.springframework.http;ResponseEntity;true;ResponseEntity;(Object,MultiValueMap,int);;Element of MapValue of Argument[1];Argument[-1];taint",
-        "org.springframework.http;ResponseEntity;true;of;(Optional);;Argument[0];ReturnValue;taint",
+        "org.springframework.http;ResponseEntity;true;of;(Optional);;Element of Argument[0];ReturnValue;taint",
         "org.springframework.http;ResponseEntity;true;ok;(Object);;Argument[0];ReturnValue;taint",
         "org.springframework.http;ResponseEntity;true;created;(URI);;Argument[0];ReturnValue;taint",
         "org.springframework.http;ResponseEntity<>$BodyBuilder;true;contentLength;(long);;Argument[-1];ReturnValue;value",
