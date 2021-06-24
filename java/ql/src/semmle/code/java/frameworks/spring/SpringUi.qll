@@ -1,3 +1,7 @@
+/**
+ * Provides models for the `org.springframework.ui` package.
+ */
+
 import java
 import semmle.code.java.dataflow.ExternalFlow
 

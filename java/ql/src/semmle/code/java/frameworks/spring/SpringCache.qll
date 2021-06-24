@@ -1,3 +1,7 @@
+/**
+ * Provides models for the `org.springframework.cache` package.
+ */
+
 import java
 import semmle.code.java.dataflow.ExternalFlow
 

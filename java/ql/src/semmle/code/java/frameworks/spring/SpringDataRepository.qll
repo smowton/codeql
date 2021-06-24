@@ -1,3 +1,7 @@
+/**
+ * Provides models for the `org.springframework.data.repository` package.
+ */
+
 import java
 import semmle.code.java.dataflow.ExternalFlow
 
