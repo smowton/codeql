@@ -8,6 +8,7 @@ import semmle.code.java.frameworks.spring.SpringHttp
 import semmle.code.java.dataflow.DataFlow
 import semmle.code.java.dataflow.TaintTracking2
 import semmle.code.java.dataflow.ExternalFlow
+import semmle.code.java.security.Encryption
 
 /** A sink that represent a method that outputs data without applying contextual output encoding. */
 abstract class XssSink extends DataFlow::Node { }
