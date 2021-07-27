@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,14 +44,14 @@ public class UnsafeReflection {
     }
 
     @RequestMapping(value = {"/service/{beanIdOrClassName}/{methodName}"}, method = {RequestMethod.POST}, consumes = {"application/json"}, produces = {"application/json"})
-    public Object bad3(@PathVariable("beanIdOrClassName") String beanIdOrClassName, @PathVariable("methodName") String methodName, @RequestBody Map<String, Object> body) throws Exception {
+    public Object bad3(@PathVariable("beanIdOrClassName") String beanIdOrClassName, @PathVariable("methodName") String methodName, @RequestBody Map<String, Object> body, ApplicationContext context) throws Exception {
         List<Object> rawData = null;
         try {
             rawData = (List<Object>)body.get("methodInput");
         } catch (Exception e) {
             return e;
         }
-        return invokeService(beanIdOrClassName, methodName, null, rawData);
+        return invokeService(beanIdOrClassName, methodName, null, rawData, context);
     }
 
     @GetMapping(value = "uf3")
@@ -60,7 +61,7 @@ public class UnsafeReflection {
         hashSet.add("com.example.test2");
         String className = request.getParameter("className");
         String parameterValue = request.getParameter("parameterValue");
-        if (!hashSet.contains(className)){ 
+        if (!hashSet.contains(className)){
             throw new Exception("Class not valid: "  + className);
         }
         try {
@@ -101,12 +102,11 @@ public class UnsafeReflection {
         }
     }
 
-    private Object invokeService(String beanIdOrClassName, String methodName, MultipartFile[] files, List<Object> data) throws Exception {
-        BeanFactory beanFactory = new BeanFactory();
+    private Object invokeService(String beanIdOrClassName, String methodName, MultipartFile[] files, List<Object> data, ApplicationContext context) throws Exception {
 		try {
 			Object bean = null;
 			Class<?> beanClass = Class.forName(beanIdOrClassName);
-			bean = beanFactory.getBean(beanClass);
+			bean = context.getBean(beanClass);
 			byte b;
 			int i;
 			Method[] arrayOfMethod;
@@ -125,20 +125,4 @@ public class UnsafeReflection {
 		}
 		return null;
     }
-}
-
-class BeanFactory {
-
-	private static HashMap<String, Object> classNameMap = new HashMap<>();
-
-	private static HashMap<Class<?>, Object> classMap = new HashMap<>();
-
-	static {
-		classNameMap.put("xxxx", Runtime.getRuntime());
-		classMap.put(Runtime.class, Runtime.getRuntime());
-	}
-
-	public Object getBean(Class<?> clzz) {
-		return classMap.get(clzz);
-	}
 }

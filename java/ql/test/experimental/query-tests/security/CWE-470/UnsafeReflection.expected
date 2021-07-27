@@ -1,30 +1,53 @@
 edges
-| UnsafeReflection.java:21:28:21:60 | getParameter(...) : String | UnsafeReflection.java:25:29:25:59 | getDeclaredConstructors(...) : Constructor[] |
-| UnsafeReflection.java:21:28:21:60 | getParameter(...) : String | UnsafeReflection.java:25:29:25:62 | ...[...] |
-| UnsafeReflection.java:25:29:25:59 | getDeclaredConstructors(...) : Constructor[] | UnsafeReflection.java:25:29:25:62 | ...[...] |
-| UnsafeReflection.java:33:28:33:60 | getParameter(...) : String | UnsafeReflection.java:39:13:39:38 | getDeclaredMethods(...) : Method[] |
-| UnsafeReflection.java:33:28:33:60 | getParameter(...) : String | UnsafeReflection.java:39:13:39:41 | ...[...] |
-| UnsafeReflection.java:39:13:39:38 | getDeclaredMethods(...) : Method[] | UnsafeReflection.java:39:13:39:41 | ...[...] |
-| UnsafeReflection.java:46:24:46:82 | beanIdOrClassName : String | UnsafeReflection.java:53:30:53:46 | beanIdOrClassName : String |
-| UnsafeReflection.java:53:30:53:46 | beanIdOrClassName : String | UnsafeReflection.java:104:34:104:57 | beanIdOrClassName : String |
-| UnsafeReflection.java:104:34:104:57 | beanIdOrClassName : String | UnsafeReflection.java:109:31:109:39 | beanClass : Class |
-| UnsafeReflection.java:104:34:104:57 | beanIdOrClassName : String | UnsafeReflection.java:119:21:119:26 | method |
-| UnsafeReflection.java:109:11:109:40 | getBean(...) : Object | UnsafeReflection.java:119:21:119:26 | method |
-| UnsafeReflection.java:109:31:109:39 | beanClass : Class | UnsafeReflection.java:109:11:109:40 | getBean(...) : Object |
+| UnsafeReflection.java:22:28:22:60 | getParameter(...) : String | UnsafeReflection.java:26:29:26:59 | getDeclaredConstructors(...) : Constructor[] |
+| UnsafeReflection.java:22:28:22:60 | getParameter(...) : String | UnsafeReflection.java:26:29:26:62 | ...[...] |
+| UnsafeReflection.java:23:33:23:70 | getParameter(...) : String | UnsafeReflection.java:26:76:26:89 | parameterValue |
+| UnsafeReflection.java:26:29:26:59 | getDeclaredConstructors(...) : Constructor[] | UnsafeReflection.java:26:29:26:62 | ...[...] |
+| UnsafeReflection.java:34:28:34:60 | getParameter(...) : String | UnsafeReflection.java:40:13:40:38 | getDeclaredMethods(...) : Method[] |
+| UnsafeReflection.java:34:28:34:60 | getParameter(...) : String | UnsafeReflection.java:40:13:40:41 | ...[...] |
+| UnsafeReflection.java:35:33:35:70 | getParameter(...) : String | UnsafeReflection.java:40:58:40:71 | parameterValue |
+| UnsafeReflection.java:40:13:40:38 | getDeclaredMethods(...) : Method[] | UnsafeReflection.java:40:13:40:41 | ...[...] |
+| UnsafeReflection.java:47:24:47:82 | beanIdOrClassName : String | UnsafeReflection.java:54:30:54:46 | beanIdOrClassName : String |
+| UnsafeReflection.java:47:132:47:168 | body : Map | UnsafeReflection.java:50:37:50:40 | body : Map |
+| UnsafeReflection.java:50:23:50:59 | (...)... : Object | UnsafeReflection.java:54:67:54:73 | rawData : Object |
+| UnsafeReflection.java:50:37:50:40 | body : Map | UnsafeReflection.java:50:37:50:59 | get(...) : Object |
+| UnsafeReflection.java:50:37:50:59 | get(...) : Object | UnsafeReflection.java:50:23:50:59 | (...)... : Object |
+| UnsafeReflection.java:54:30:54:46 | beanIdOrClassName : String | UnsafeReflection.java:105:34:105:57 | beanIdOrClassName : String |
+| UnsafeReflection.java:54:67:54:73 | rawData : Object | UnsafeReflection.java:105:102:105:118 | data : Object |
+| UnsafeReflection.java:63:33:63:70 | getParameter(...) : String | UnsafeReflection.java:69:76:69:89 | parameterValue |
+| UnsafeReflection.java:78:33:78:70 | getParameter(...) : String | UnsafeReflection.java:84:76:84:89 | parameterValue |
+| UnsafeReflection.java:93:33:93:70 | getParameter(...) : String | UnsafeReflection.java:99:76:99:89 | parameterValue |
+| UnsafeReflection.java:105:34:105:57 | beanIdOrClassName : String | UnsafeReflection.java:119:21:119:26 | method |
+| UnsafeReflection.java:105:102:105:118 | data : Object | UnsafeReflection.java:119:41:119:44 | data |
 nodes
-| UnsafeReflection.java:21:28:21:60 | getParameter(...) : String | semmle.label | getParameter(...) : String |
-| UnsafeReflection.java:25:29:25:59 | getDeclaredConstructors(...) : Constructor[] | semmle.label | getDeclaredConstructors(...) : Constructor[] |
-| UnsafeReflection.java:25:29:25:62 | ...[...] | semmle.label | ...[...] |
-| UnsafeReflection.java:33:28:33:60 | getParameter(...) : String | semmle.label | getParameter(...) : String |
-| UnsafeReflection.java:39:13:39:38 | getDeclaredMethods(...) : Method[] | semmle.label | getDeclaredMethods(...) : Method[] |
-| UnsafeReflection.java:39:13:39:41 | ...[...] | semmle.label | ...[...] |
-| UnsafeReflection.java:46:24:46:82 | beanIdOrClassName : String | semmle.label | beanIdOrClassName : String |
-| UnsafeReflection.java:53:30:53:46 | beanIdOrClassName : String | semmle.label | beanIdOrClassName : String |
-| UnsafeReflection.java:104:34:104:57 | beanIdOrClassName : String | semmle.label | beanIdOrClassName : String |
-| UnsafeReflection.java:109:11:109:40 | getBean(...) : Object | semmle.label | getBean(...) : Object |
-| UnsafeReflection.java:109:31:109:39 | beanClass : Class | semmle.label | beanClass : Class |
+| UnsafeReflection.java:22:28:22:60 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:23:33:23:70 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:26:29:26:59 | getDeclaredConstructors(...) : Constructor[] | semmle.label | getDeclaredConstructors(...) : Constructor[] |
+| UnsafeReflection.java:26:29:26:62 | ...[...] | semmle.label | ...[...] |
+| UnsafeReflection.java:26:76:26:89 | parameterValue | semmle.label | parameterValue |
+| UnsafeReflection.java:34:28:34:60 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:35:33:35:70 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:40:13:40:38 | getDeclaredMethods(...) : Method[] | semmle.label | getDeclaredMethods(...) : Method[] |
+| UnsafeReflection.java:40:13:40:41 | ...[...] | semmle.label | ...[...] |
+| UnsafeReflection.java:40:58:40:71 | parameterValue | semmle.label | parameterValue |
+| UnsafeReflection.java:47:24:47:82 | beanIdOrClassName : String | semmle.label | beanIdOrClassName : String |
+| UnsafeReflection.java:47:132:47:168 | body : Map | semmle.label | body : Map |
+| UnsafeReflection.java:50:23:50:59 | (...)... : Object | semmle.label | (...)... : Object |
+| UnsafeReflection.java:50:37:50:40 | body : Map | semmle.label | body : Map |
+| UnsafeReflection.java:50:37:50:59 | get(...) : Object | semmle.label | get(...) : Object |
+| UnsafeReflection.java:54:30:54:46 | beanIdOrClassName : String | semmle.label | beanIdOrClassName : String |
+| UnsafeReflection.java:54:67:54:73 | rawData : Object | semmle.label | rawData : Object |
+| UnsafeReflection.java:63:33:63:70 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:69:76:69:89 | parameterValue | semmle.label | parameterValue |
+| UnsafeReflection.java:78:33:78:70 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:84:76:84:89 | parameterValue | semmle.label | parameterValue |
+| UnsafeReflection.java:93:33:93:70 | getParameter(...) : String | semmle.label | getParameter(...) : String |
+| UnsafeReflection.java:99:76:99:89 | parameterValue | semmle.label | parameterValue |
+| UnsafeReflection.java:105:34:105:57 | beanIdOrClassName : String | semmle.label | beanIdOrClassName : String |
+| UnsafeReflection.java:105:102:105:118 | data : Object | semmle.label | data : Object |
 | UnsafeReflection.java:119:21:119:26 | method | semmle.label | method |
+| UnsafeReflection.java:119:41:119:44 | data | semmle.label | data |
 #select
-| UnsafeReflection.java:25:29:25:62 | ...[...] | UnsafeReflection.java:21:28:21:60 | getParameter(...) : String | UnsafeReflection.java:25:29:25:62 | ...[...] | Unsafe reflection of $@. | UnsafeReflection.java:21:28:21:60 | getParameter(...) | user input |
-| UnsafeReflection.java:39:13:39:41 | ...[...] | UnsafeReflection.java:33:28:33:60 | getParameter(...) : String | UnsafeReflection.java:39:13:39:41 | ...[...] | Unsafe reflection of $@. | UnsafeReflection.java:33:28:33:60 | getParameter(...) | user input |
-| UnsafeReflection.java:119:21:119:26 | method | UnsafeReflection.java:46:24:46:82 | beanIdOrClassName : String | UnsafeReflection.java:119:21:119:26 | method | Unsafe reflection of $@. | UnsafeReflection.java:46:24:46:82 | beanIdOrClassName | user input |
+| UnsafeReflection.java:26:29:26:62 | ...[...] | UnsafeReflection.java:22:28:22:60 | getParameter(...) : String | UnsafeReflection.java:26:29:26:62 | ...[...] | Unsafe reflection of $@. | UnsafeReflection.java:22:28:22:60 | getParameter(...) | user input |
+| UnsafeReflection.java:40:13:40:41 | ...[...] | UnsafeReflection.java:34:28:34:60 | getParameter(...) : String | UnsafeReflection.java:40:13:40:41 | ...[...] | Unsafe reflection of $@. | UnsafeReflection.java:34:28:34:60 | getParameter(...) | user input |
+| UnsafeReflection.java:119:21:119:26 | method | UnsafeReflection.java:47:24:47:82 | beanIdOrClassName : String | UnsafeReflection.java:119:21:119:26 | method | Unsafe reflection of $@. | UnsafeReflection.java:47:24:47:82 | beanIdOrClassName | user input |
