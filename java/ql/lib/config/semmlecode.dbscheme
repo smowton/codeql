@@ -507,7 +507,8 @@ stmts(
   int bodydecl: @callable ref
 );
 
-@stmtparent = @callable | @stmt | @switchexpr;
+// @stmtparent = @callable | @stmt | @switchexpr;
+@stmtparent = @exprparent;
 
 case @stmt.kind of
   0 = @block
