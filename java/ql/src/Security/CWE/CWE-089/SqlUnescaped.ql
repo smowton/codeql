@@ -50,5 +50,6 @@ where
     )
   ) and
   not queryTaintedBy(query, _, _)
-select query, "Query might not neutralize special characters in $@.", uncontrolled,
-  "this expression"
+select uncontrolled,
+  "Possibly-user-controlled expression may be used in $@ without first neutralizing special characters.",
+  query, "this query"
