@@ -19,7 +19,7 @@ import SqlInjectionLib
 class UncontrolledStringBuilderSource extends DataFlow::ExprNode {
   UncontrolledStringBuilderSource() {
     exists(StringBuilderVar sbv |
-      uncontrolledStringBuilderQuery(sbv, _) and
+      uncontrolledStringBuilderQuery(sbv, _, _, _) and
       this.getExpr() = sbv.getToStringCall()
     )
   }
@@ -39,16 +39,17 @@ class UncontrolledStringBuilderSourceFlowConfig extends TaintTracking::Configura
   }
 }
 
-from QueryInjectionSink query, Expr uncontrolled
+from QueryInjectionSink query, Expr uncontrolled, Expr endsInQuote, Expr contributor
 where
   (
-    builtFromUncontrolledConcat(query.asExpr(), uncontrolled)
+    builtFromUncontrolledConcat(query.asExpr(), uncontrolled, endsInQuote, contributor)
     or
     exists(StringBuilderVar sbv, UncontrolledStringBuilderSourceFlowConfig conf |
-      uncontrolledStringBuilderQuery(sbv, uncontrolled) and
+      uncontrolledStringBuilderQuery(sbv, uncontrolled, endsInQuote, contributor) and
       conf.hasFlow(DataFlow::exprNode(sbv.getToStringCall()), query)
     )
   ) and
   not queryTaintedBy(query, _, _)
-select query, "Query might not neutralize special characters in $@.", uncontrolled,
-  "this expression"
+select uncontrolled,
+  "Possibly user-controlled expression (flows from $@, appears to be quoted by $@) may be used to build $@ without neutralizing special characters.",
+  contributor, "this expression", endsInQuote, "this string", query, "this query"

@@ -6,16 +6,21 @@ import semmle.code.java.dataflow.TaintTracking
  * A string concatenation that includes a string
  * not known to be programmer controlled.
  */
-predicate builtFromUncontrolledConcat(Expr expr, Expr uncontrolled) {
+predicate builtFromUncontrolledConcat(
+  Expr expr, Expr uncontrolled, Expr quote, Expr contribUncontrolled
+) {
   // Base case
   exists(AddExpr concatExpr | concatExpr = expr |
-    endsInQuote(concatExpr.getLeftOperand()) and
+    quote = concatExpr.getLeftOperand() and
+    endsInQuote(quote) and
     uncontrolled = concatExpr.getRightOperand() and
-    not controlledString(uncontrolled)
+    not controlledString(uncontrolled) and
+    not controlledString(contribUncontrolled) and
+    controlledStringProp*(contribUncontrolled, uncontrolled)
   )
   or
   // Recursive cases
-  exists(Expr other | builtFromUncontrolledConcat(other, uncontrolled) |
+  exists(Expr other | builtFromUncontrolledConcat(other, uncontrolled, quote, contribUncontrolled) |
     expr.(AddExpr).getAnOperand() = other
     or
     exists(Variable var | var.getAnAssignedValue() = other and var.getAnAccess() = expr)
@@ -26,19 +31,24 @@ predicate builtFromUncontrolledConcat(Expr expr, Expr uncontrolled) {
  * A query built with a StringBuilder, where one of the
  * items appended is uncontrolled.
  */
-predicate uncontrolledStringBuilderQuery(StringBuilderVar sbv, Expr uncontrolled) {
+predicate uncontrolledStringBuilderQuery(
+  StringBuilderVar sbv, Expr uncontrolled, Expr quote, Expr contribUncontrolled
+) {
   // A single append that has a problematic concatenation.
   exists(MethodAccess append |
     append = sbv.getAnAppend() and
-    builtFromUncontrolledConcat(append.getArgument(0), uncontrolled)
+    builtFromUncontrolledConcat(append.getArgument(0), uncontrolled, quote, contribUncontrolled)
   )
   or
   // Two calls to append, one ending in a quote, the next being uncontrolled.
   exists(MethodAccess quoteAppend, MethodAccess uncontrolledAppend |
     sbv.getAnAppend() = quoteAppend and
-    endsInQuote(quoteAppend.getArgument(0)) and
+    quote = quoteAppend.getArgument(0) and
+    endsInQuote(quote) and
     sbv.getNextAppend(quoteAppend) = uncontrolledAppend and
     uncontrolled = uncontrolledAppend.getArgument(0) and
-    not controlledString(uncontrolled)
+    not controlledString(uncontrolled) and
+    not controlledString(contribUncontrolled) and
+    controlledStringProp*(contribUncontrolled, uncontrolled)
   )
 }
