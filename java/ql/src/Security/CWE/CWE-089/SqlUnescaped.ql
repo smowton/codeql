@@ -2,7 +2,7 @@
  * @name Query built without neutralizing special characters
  * @description Building a SQL or Java Persistence query without escaping or otherwise neutralizing any special
  *              characters is vulnerable to insertion of malicious code.
- * @kind problem
+ * @kind path-problem
  * @problem.severity error
  * @security-severity 8.8
  * @precision high
@@ -39,8 +39,7 @@ class UncontrolledStringBuilderSourceFlowConfig extends TaintTracking::Configura
   }
 }
 
-from QueryInjectionSink query, Expr uncontrolled
-where
+predicate mayBeUncontrolled(QueryInjectionSink query, Expr uncontrolled, Expr uncontrolledSource) {
   (
     builtFromUncontrolledConcat(query.asExpr(), uncontrolled)
     or
@@ -49,7 +48,27 @@ where
       conf.hasFlow(DataFlow::exprNode(sbv.getToStringCall()), query)
     )
   ) and
-  not queryTaintedBy(query, _, _)
-select uncontrolled,
+  not queryTaintedBy(query, _, _) and
+  controlledStringProp*(uncontrolledSource, uncontrolled) and
+  not controlledString(uncontrolledSource)
+}
+
+from QueryInjectionSink query, Expr uncontrolled, Expr uncontrolledSource
+where mayBeUncontrolled(query, uncontrolled, uncontrolledSource)
+select uncontrolled, uncontrolledSource, uncontrolled,
   "Possibly-user-controlled expression may be used in $@ without first neutralizing special characters.",
   query, "this query"
+
+/** Holds if `(a,b)` is an edge in the graph of data flow path explanations. */
+query predicate edges(Expr a, Expr b) { controlledStringProp(a, b) }
+
+/** Holds if `n` is a node in the graph of data flow path explanations. */
+query predicate nodes(Expr n, string key, string val) {
+  (
+    mayBeUncontrolled(_, n, _) or
+    controlledStringProp(n, _) or
+    controlledStringProp(_, n)
+  ) and
+  key = "semmle.label" and
+  val = n.toString()
+}

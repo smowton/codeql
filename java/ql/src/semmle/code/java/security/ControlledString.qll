@@ -30,7 +30,7 @@ predicate endsInQuote(Expr expr) {
 }
 
 /** The given expression is controlled if the other expression is controlled. */
-private predicate controlledStringProp(Expr src, Expr dest) {
+predicate controlledStringProp(Expr src, Expr dest) {
   // Propagation through variables.
   exists(Variable var | var.getAnAccess() = dest | src = var.getAnAssignedValue())
   or
