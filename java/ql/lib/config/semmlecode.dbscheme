@@ -323,7 +323,7 @@ fields(
   unique int id: @field,
   string nodeName: string ref,
   int typeid: @type ref,
-  int parentid: @package_or_reftype ref,
+  int parentid: @reftype ref,
   int sourceid: @field ref
 );
 
@@ -335,8 +335,6 @@ constrs(
   int parentid: @reftype ref,
   int sourceid: @constructor ref
 );
-
-@package_or_reftype = @package | @reftype
 
 methods(
   unique int id: @method,
