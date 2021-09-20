@@ -652,6 +652,7 @@ case @expr.kind of
 | 72  = @intersectiontypeaccess
 | 73  = @switchexpr
 | 74  = @whenexpr
+| 75  = @getclassexpr
 ;
 
 /** Holds if this `when` expression was written as an `if` expression. */
