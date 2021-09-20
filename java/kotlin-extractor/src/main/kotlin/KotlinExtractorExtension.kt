@@ -1,29 +1,26 @@
 package com.github.codeql
 
+import com.github.codeql.comments.CommentExtractor
+import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
+import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin.*
+import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
+import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.util.packageFqName
+import org.jetbrains.kotlin.ir.util.render
 import java.io.File
 import java.io.FileOutputStream
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.Optional
+import java.util.*
 import kotlin.system.exitProcess
-import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
-import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
-import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.util.dump
-import org.jetbrains.kotlin.ir.util.IdSignature
-import org.jetbrains.kotlin.ir.util.packageFqName
-import org.jetbrains.kotlin.ir.util.render
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.ir.IrFileEntry
-import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin.*
-import org.jetbrains.kotlin.ir.IrStatement
-import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
-import org.jetbrains.kotlin.descriptors.ClassKind
 
 class KotlinExtractorExtension(private val invocationTrapFile: String, private val checkTrapIdentical: Boolean) : IrGenerationExtension {
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
@@ -164,6 +161,7 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         val pkgId = extractPackage(pkg)
         tw.writeCupackage(id, pkgId)
         file.declarations.map { extractDeclaration(it, Optional.empty()) }
+        CommentExtractor(this).extract()
     }
 
   fun extractFileClass(f: IrFile): Label<out DbClass> {
@@ -258,7 +256,30 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         }
     }
 
-    fun getTypeParameterLabel(param: IrTypeParameter): String {
+
+
+    fun getLabel(element: IrElement) : String? {
+        when (element) {
+            is IrFile -> return "@\"${element.path};sourcefile\"" // todo: remove copy-pasted code
+            is IrClass -> return getClassLabel(element)
+            is IrTypeParameter -> return getTypeParameterLabel(element)
+            is IrFunction -> return getFunctionLabel(element)
+            is IrValueParameter -> return getValueParameterLabel(element)
+            is IrProperty -> return getPropertyLabel(element)
+
+            // Fresh entities:
+            is IrBody -> return null
+            is IrExpression -> return null
+
+            // todo add others:
+            else -> {
+                logger.warnElement(Severity.ErrorSevere, "Unhandled element type: ${element::class}", element)
+                return null
+            }
+        }
+    }
+
+    private fun getTypeParameterLabel(param: IrTypeParameter): String {
         val parentLabel = useDeclarationParent(param.parent)
         return "@\"typevar;{$parentLabel};${param.name}\""
     }
@@ -267,7 +288,7 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         return tw.getLabelFor(getTypeParameterLabel(param))
     }
 
-    fun getClassLabel(c: IrClass): String {
+    private fun getClassLabel(c: IrClass): String {
         val pkg = c.packageFqName?.asString() ?: ""
         val cls = c.name.asString()
         val qualClassName = if (pkg.isEmpty()) cls else "$pkg.$cls"
@@ -360,20 +381,30 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         return t
     }
 
-    fun useFunction(f: IrFunction): Label<out DbMethod> {
+    private fun getFunctionLabel(f: IrFunction) : String {
         val paramTypeIds = f.valueParameters.joinToString() { "{${useType(erase(it.type)).toString()}}" }
         val returnTypeId = useType(erase(f.returnType))
         val parentId = useDeclarationParent(f.parent)
         val label = "@\"callable;{$parentId}.${f.name.asString()}($paramTypeIds){$returnTypeId}\""
+        return label
+    }
+
+    fun useFunction(f: IrFunction): Label<out DbMethod> {
+        val label = getFunctionLabel(f)
         val id: Label<DbMethod> = tw.getLabelFor(label)
         return id
     }
 
-    fun useValueParameter(vp: IrValueParameter): Label<out DbParam> {
+    private fun getValueParameterLabel(vp: IrValueParameter) : String {
         @Suppress("UNCHECKED_CAST")
         val parentId: Label<out DbMethod> = useDeclarationParent(vp.parent) as Label<out DbMethod>
         val idx = vp.index
         val label = "@\"params;{$parentId};$idx\""
+        return label
+    }
+
+    fun useValueParameter(vp: IrValueParameter): Label<out DbParam> {
+        val label = getValueParameterLabel(vp)
         val id = tw.getLabelFor<DbParam>(label)
         return id
     }
@@ -403,9 +434,14 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         }
     }
 
-    fun useProperty(p: IrProperty): Label<out DbField> {
+    private fun getPropertyLabel(p: IrProperty) : String {
         val parentId = useDeclarationParent(p.parent)
         val label = "@\"field;{$parentId};${p.name.asString()}\""
+        return label
+    }
+
+    fun useProperty(p: IrProperty): Label<out DbField> {
+        var label = getPropertyLabel(p)
         val id: Label<DbField> = tw.getLabelFor(label)
         return id
     }
