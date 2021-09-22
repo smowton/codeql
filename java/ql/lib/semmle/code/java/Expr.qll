@@ -2043,9 +2043,7 @@ class WhenExpr extends Expr, @whenexpr {
   override string getAPrimaryQlClass() { result = "WhenExpr" }
 
   /** Gets the `i`th branch. */
-  WhenBranch getBranch(int i) {
-    when_branch(result, this, i)
-  }
+  WhenBranch getBranch(int i) { when_branch(result, this, i) }
 }
 
 /** A Kotlin `when` branch. */
@@ -2062,4 +2060,14 @@ class WhenBranch extends Top, @whenbranch {
   override string toString() { result = "... -> ..." }
 
   override string getAPrimaryQlClass() { result = "WhenBranch" }
+}
+
+/** A Kotlin `::class` expression. */
+class ClassExpr extends Expr, @getclassexpr {
+  /** Gets the expression whose class is being returned. */
+  Expr getExpr() { result.isNthChildOf(this, 0) }
+
+  override string toString() { result = "::class" }
+
+  override string getAPrimaryQlClass() { result = "ClassExpr" }
 }
