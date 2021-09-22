@@ -634,6 +634,8 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         }
     }
 
+    private val loopIdMap: MutableMap<IrLoop, Label<out DbKtloopstmt>> = mutableMapOf()
+
     fun extractExpression(e: IrExpression, callable: Label<out DbCallable>, parent: Label<out DbExprparent>, idx: Int) {
         when(e) {
             is IrCall -> extractCall(e, callable, parent, idx)
@@ -716,13 +718,31 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
 
                 extractExpression(e.value, callable, id, 1)
             }
+            is IrThrow -> {
+                val id = tw.getFreshIdLabel<DbThrowstmt>()
+                val locId = tw.getLocation(e)
+                tw.writeStmts_throwstmt(id, parent, idx, callable)
+                tw.writeHasLocation(id, locId)
+                extractExpression(e.value, callable, id, 0)
+            }
+            is IrBreak -> {
+                val id = tw.getFreshIdLabel<DbBreakstmt>()
+                tw.writeStmts_breakstmt(id, parent, idx, callable)
+                extractBreakContinue(e, id)
+            }
+            is IrContinue -> {
+                val id = tw.getFreshIdLabel<DbContinuestmt>()
+                tw.writeStmts_continuestmt(id, parent, idx, callable)
+                extractBreakContinue(e, id)
+            }
             is IrReturn -> {
                 val id = tw.getFreshIdLabel<DbReturnstmt>()
                 val locId = tw.getLocation(e)
                 tw.writeStmts_returnstmt(id, parent, idx, callable)
                 tw.writeHasLocation(id, locId)
                 extractExpression(e.value, callable, id, 0)
-            } is IrContainerExpression -> {
+            }
+            is IrContainerExpression -> {
                 val id = tw.getFreshIdLabel<DbBlock>()
                 val locId = tw.getLocation(e)
                 tw.writeStmts_block(id, parent, idx, callable)
@@ -730,8 +750,10 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
                 e.statements.forEachIndexed { i, s ->
                     extractStatement(s, callable, id, i)
                 }
-            } is IrWhileLoop -> {
+            }
+            is IrWhileLoop -> {
                 val id = tw.getFreshIdLabel<DbWhilestmt>()
+                loopIdMap[e] = id
                 val locId = tw.getLocation(e)
                 tw.writeStmts_whilestmt(id, parent, idx, callable)
                 tw.writeHasLocation(id, locId)
@@ -740,8 +762,11 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
                 if(body != null) {
                     extractExpression(body, callable, id, 1)
                 }
-            } is IrDoWhileLoop -> {
+                loopIdMap.remove(e)
+            }
+            is IrDoWhileLoop -> {
                 val id = tw.getFreshIdLabel<DbDostmt>()
+                loopIdMap[e] = id
                 val locId = tw.getLocation(e)
                 tw.writeStmts_dostmt(id, parent, idx, callable)
                 tw.writeHasLocation(id, locId)
@@ -750,7 +775,9 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
                 if(body != null) {
                     extractExpression(body, callable, id, 1)
                 }
-            } is IrWhen -> {
+                loopIdMap.remove(e)
+            }
+            is IrWhen -> {
                 val id = tw.getFreshIdLabel<DbWhenexpr>()
                 val typeId = useType(e.type)
                 val locId = tw.getLocation(e)
@@ -783,6 +810,28 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
                 logger.warnElement(Severity.ErrorSevere, "Unrecognised IrExpression: " + e.javaClass, e)
             }
         }
+    }
+
+    private fun extractBreakContinue(
+        e: IrBreakContinue,
+        id: Label<out DbBreakcontinuestmt>
+    ) {
+        val locId = tw.getLocation(e)
+        @Suppress("UNCHECKED_CAST")
+        tw.writeHasLocation(id as Label<out DbLocatable>, locId)
+        val label = e.label
+        if (label != null) {
+            @Suppress("UNCHECKED_CAST")
+            tw.writeNamestrings(label, "", id as Label<out DbNamedexprorstmt>)
+        }
+
+        val loopId = loopIdMap[e.loop]
+        if (loopId == null) {
+            logger.warnElement(Severity.ErrorSevere, "Missing break/continue target", e)
+            return
+        }
+
+        tw.writeKtBreakContinueTarget(id, loopId)
     }
 }
 
