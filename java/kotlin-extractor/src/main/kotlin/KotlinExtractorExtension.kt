@@ -412,9 +412,33 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
     private fun getValueParameterLabel(vp: IrValueParameter) : String {
         @Suppress("UNCHECKED_CAST")
         val parentId: Label<out DbMethod> = useDeclarationParent(vp.parent) as Label<out DbMethod>
-        val idx = vp.index
+        var idx = vp.index
+        if (idx < 0) {
+            // We're not extracting this and this@TYPE parameters of functions:
+            logger.warnElement(Severity.ErrorSevere, "Unexpected negative index for parameter", vp)
+        }
         val label = "@\"params;{$parentId};$idx\""
         return label
+    }
+
+    private fun isQualifiedThis(vp: IrValueParameter): Boolean {
+        return isQualifiedThisFunction(vp) ||
+               isQualifiedThisClass(vp)
+    }
+
+    private fun isQualifiedThisFunction(vp: IrValueParameter): Boolean {
+        val parent = vp.parent
+        return vp.index == -1 &&
+               parent is IrFunction &&
+               parent.dispatchReceiverParameter == vp &&
+               parent.extensionReceiverParameter != null
+    }
+
+    private fun isQualifiedThisClass(vp: IrValueParameter): Boolean {
+        val parent = vp.parent
+        return vp.index == -1 &&
+               parent is IrClass &&
+               parent.thisReceiver == vp
     }
 
     fun useValueParameter(vp: IrValueParameter): Label<out DbParam> {
@@ -445,6 +469,12 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
         }
         f.valueParameters.forEachIndexed { i, vp ->
             extractValueParameter(vp, id, i)
+        }
+
+        val extReceiver = f.extensionReceiverParameter
+        if (extReceiver != null) {
+            val extendedType = useType(extReceiver.type)
+            tw.writeKtExtensionFunctions(id, extendedType)
         }
     }
 
@@ -690,6 +720,10 @@ class KotlinFileExtractor(val logger: FileLogger, val tw: FileTrapWriter, val fi
                     val typeId = useType(e.type)
                     val locId = tw.getLocation(e)
                     tw.writeExprs_thisaccess(id, typeId, parent, idx)
+                    if (isQualifiedThis(owner)) {
+                        // todo: add type access as child of 'id' at index 0
+                        logger.warnElement(Severity.ErrorSevere, "TODO: Qualified this access found.", e)
+                    }
                     tw.writeHasLocation(id, locId)
                 } else {
                     val id = tw.getFreshIdLabel<DbVaraccess>()

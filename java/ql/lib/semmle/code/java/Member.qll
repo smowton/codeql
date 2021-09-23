@@ -658,3 +658,15 @@ class Field extends Member, ExprParent, @field, Variable {
 class InstanceField extends Field {
   InstanceField() { not this.isStatic() }
 }
+
+/** A Kotlin extension function. */
+class ExtensionMethod extends Method {
+  Type extendedType;
+
+  ExtensionMethod() { ktExtensionFunctions(this, extendedType) }
+
+  /** Gets the type being extended by this method. */
+  Type getExtendedType() { result = extendedType }
+
+  override string getAPrimaryQlClass() { result = "ExtensionMethod" }
+}
