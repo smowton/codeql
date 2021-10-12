@@ -473,7 +473,7 @@ class GenericCall extends Call {
     result.(Wildcard).getUpperBound().getType() = v.getUpperBoundType()
   }
 
-  private Type getAnExplicitTypeArgument(TypeVariable v) {
+  private RefType getAnExplicitTypeArgument(TypeVariable v) {
     exists(GenericCallable gen, MethodAccess call, int i |
       this = call and
       gen = call.getCallee() and
@@ -483,7 +483,7 @@ class GenericCall extends Call {
   }
 
   /** Gets a type argument of the call for the given `TypeVariable`. */
-  Type getATypeArgument(TypeVariable v) {
+  RefType getATypeArgument(TypeVariable v) {
     result = getAnExplicitTypeArgument(v)
     or
     not exists(getAnExplicitTypeArgument(v)) and
