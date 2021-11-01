@@ -117,9 +117,9 @@ module Public {
      * Gets an upper bound on the type of this node.
      */
     Type getTypeBound() {
-      result = getImprovedTypeBound()
+      result = this.getImprovedTypeBound()
       or
-      result = getType() and not exists(getImprovedTypeBound())
+      result = this.getType() and not exists(this.getImprovedTypeBound())
     }
 
     /**
@@ -132,7 +132,7 @@ module Public {
     predicate hasLocationInfo(
       string filepath, int startline, int startcolumn, int endline, int endcolumn
     ) {
-      getLocation().hasLocationInfo(filepath, startline, startcolumn, endline, endcolumn)
+      this.getLocation().hasLocationInfo(filepath, startline, startcolumn, endline, endcolumn)
     }
   }
 
@@ -288,9 +288,9 @@ private class NewExpr extends PostUpdateNode, TExprNode {
  * A `PostUpdateNode` that is not a `ClassInstanceExpr`.
  */
 abstract private class ImplicitPostUpdateNode extends PostUpdateNode {
-  override Location getLocation() { result = getPreUpdateNode().getLocation() }
+  override Location getLocation() { result = this.getPreUpdateNode().getLocation() }
 
-  override string toString() { result = getPreUpdateNode().toString() + " [post update]" }
+  override string toString() { result = this.getPreUpdateNode().toString() + " [post update]" }
 }
 
 private class ExplicitExprPostUpdate extends ImplicitPostUpdateNode, TExplicitExprPostUpdate {
@@ -304,6 +304,14 @@ private class ImplicitExprPostUpdate extends ImplicitPostUpdateNode, TImplicitEx
 }
 
 module Private {
+  /** Gets the callable in which this node occurs. */
+  DataFlowCallable nodeGetEnclosingCallable(Node n) { result = n.getEnclosingCallable() }
+
+  /** Holds if `p` is a `ParameterNode` of `c` with position `pos`. */
+  predicate isParameterNode(ParameterNode p, DataFlowCallable c, int pos) {
+    p.isParameterOf(c, pos)
+  }
+
   /**
    * A data flow node that occurs as the argument of a call and is passed as-is
    * to the callable. Arguments that are wrapped in an implicit varargs array

@@ -427,7 +427,7 @@ typeVars(
   string nodeName: string ref,
   int pos: int ref,
   int kind: int ref, // deprecated
-  int parentid: @typeorcallable ref
+  int parentid: @classorinterfaceorcallable ref
 );
 
 wildcards(
@@ -448,7 +448,7 @@ typeBounds(
 typeArgs(
   int argumentid: @reftype ref,
   int pos: int ref,
-  int parentid: @typeorcallable ref
+  int parentid: @classorinterfaceorcallable ref
 );
 
 isParameterized(
@@ -521,7 +521,7 @@ hasModifier(
 
 imports(
   unique int id: @import,
-  int holder: @typeorpackage ref,
+  int holder: @classorinterfaceorpackage ref,
   string name: string ref,
   int kind: int ref
 );
@@ -910,10 +910,9 @@ javadocText(
 @javadocParent = @javadoc | @javadocTag;
 @javadocElement = @javadocTag | @javadocText;
 
-@typeorpackage = @type | @package;
-
-@typeorcallable = @type | @callable;
 @classorinterface = @interface | @class;
+@classorinterfaceorpackage = @classorinterface | @package;
+@classorinterfaceorcallable = @classorinterface | @callable;
 @boundedtype = @typevariable | @wildcard;
 @reftype = @classorinterface | @array | @boundedtype;
 @classorarray = @class | @array;
