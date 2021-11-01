@@ -668,6 +668,7 @@ case @expr.kind of
 | 76  = @safecastexpr
 | 77  = @notinstanceofexpr
 | 78  = @stmtexpr
+| 79  = @stringtemplateexpr
 ;
 
 /** Holds if this `when` expression was written as an `if` expression. */
