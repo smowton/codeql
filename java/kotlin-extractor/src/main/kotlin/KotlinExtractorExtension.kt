@@ -292,6 +292,7 @@ open class KotlinFileExtractor(
                 // Leaving this intentionally empty. init blocks are extracted during class extraction.
             }
             is IrProperty -> extractProperty(declaration, parentId)
+            is IrEnumEntry -> extractEnumEntry(declaration, parentId)
             else -> logger.warnElement(Severity.ErrorSevere, "Unrecognised IrDeclaration: " + declaration.javaClass, declaration)
         }
     }
@@ -689,10 +690,10 @@ class X {
             }
         }
 
-        extractClassCommon(c, id)
         c.typeParameters.map { extractTypeParameter(it) }
         c.declarations.map { extractDeclaration(it, id) }
         extractObjectInitializerFunction(c, id)
+        extractClassCommon(c, id)
 
         return id
     }
@@ -723,7 +724,6 @@ class X {
                 tw.writeIsEnumType(classId)
             }
         }
-        extractClassCommon(c, id)
 
         for ((idx, arg) in typeArgs.withIndex()) {
             val argId = getTypeArgumentLabel(arg, c)
@@ -732,6 +732,7 @@ class X {
         tw.writeIsParameterized(id)
         val unbound = useClassSource(c)
         tw.writeErasure(id, unbound)
+        extractClassCommon(c, id)
 
         return id
     }
@@ -976,6 +977,25 @@ class X {
             tw.writeFields(id, p.name.asString(), typeId, parentId, id)
             tw.writeHasLocation(id, locId)
         }
+    }
+
+    private fun getEnumEntryLabel(ee: IrEnumEntry) : String {
+        val parentId = useDeclarationParent(ee.parent)
+        val label = "@\"field;{$parentId};${ee.name.asString()}\""
+        return label
+    }
+
+    fun useEnumEntry(ee: IrEnumEntry): Label<out DbField> {
+        var label = getEnumEntryLabel(ee)
+        val id: Label<DbField> = tw.getLabelFor(label)
+        return id
+    }
+
+    fun extractEnumEntry(ee: IrEnumEntry, parentId: Label<out DbReftype>) {
+        val id = useEnumEntry(ee)
+        val locId = tw.getLocation(ee)
+        tw.writeFields(id, ee.name.asString(), parentId, parentId, id)
+        tw.writeHasLocation(id, locId)
     }
 
     fun extractBody(b: IrBody, callable: Label<out DbCallable>) {
@@ -1399,6 +1419,17 @@ class X {
                 val exprParent = parent.expr(e, callable)
                 extractCall(e, callable, exprParent.parent, exprParent.idx)
             }
+            is IrStringConcatenation -> {
+                val exprParent = parent.expr(e, callable)
+                val id = tw.getFreshIdLabel<DbStringtemplateexpr>()
+                val type = useType(e.type)
+                val locId = tw.getLocation(e)
+                tw.writeExprs_stringtemplateexpr(id, type.javaResult.id, type.kotlinResult.id, exprParent.parent, exprParent.idx)
+                tw.writeHasLocation(id, locId)
+                e.arguments.forEachIndexed { i, a ->
+                    extractExpressionExpr(a, callable, id, i)
+                }
+            }
             is IrConst<*> -> {
                 val exprParent = parent.expr(e, callable)
                 val v = e.value
@@ -1488,6 +1519,17 @@ class X {
                     val vId = useValueDeclaration(owner)
                     tw.writeVariableBinding(id, vId)
                 }
+            }
+            is IrGetEnumValue -> {
+                val exprParent = parent.expr(e, callable)
+                val id = tw.getFreshIdLabel<DbVaraccess>()
+                val type = useType(e.type)
+                val locId = tw.getLocation(e)
+                tw.writeExprs_varaccess(id, type.javaResult.id, type.kotlinResult.id, exprParent.parent, exprParent.idx)
+                tw.writeHasLocation(id, locId)
+                val owner = e.symbol.owner
+                val vId = useEnumEntry(owner)
+                tw.writeVariableBinding(id, vId)
             }
             is IrSetValue -> {
                 val exprParent = parent.expr(e, callable)
