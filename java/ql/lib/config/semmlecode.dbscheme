@@ -353,6 +353,7 @@ fields(
   unique int id: @field,
   string nodeName: string ref,
   int typeid: @type ref,
+  int kttypeid: @kt_type ref,
   int parentid: @reftype ref,
   int sourceid: @field ref
 );
@@ -362,6 +363,7 @@ constrs(
   string nodeName: string ref,
   string signature: string ref,
   int typeid: @type ref,
+  int kttypeid: @kt_type ref,
   int parentid: @reftype ref,
   int sourceid: @constructor ref
 );
@@ -371,6 +373,7 @@ methods(
   string nodeName: string ref,
   string signature: string ref,
   int typeid: @type ref,
+  int kttypeid: @kt_type ref,
   int parentid: @reftype ref,
   int sourceid: @method ref
 );
@@ -379,6 +382,7 @@ methods(
 params(
   unique int id: @param,
   int typeid: @type ref,
+  int kttypeid: @kt_type ref,
   int pos: int ref,
   int parentid: @callable ref,
   int sourceid: @param ref
@@ -490,8 +494,10 @@ arrays(
   unique int id: @array,
   string nodeName: string ref,
   int elementtypeid: @type ref,
+  int elementkttypeid: @kt_type ref,
   int dimension: int ref,
-  int componenttypeid: @type ref
+  int componenttypeid: @type ref,
+  int componentkttypeid: @kt_type ref
 );
 
 enclInReftype(
@@ -777,6 +783,7 @@ localvars(
   unique int id: @localvar,
   string nodeName: string ref,
   int typeid: @type ref,
+  int kttypeid: @kt_type ref,
   int parentid: @localvariabledeclexpr ref
 );
 
@@ -1076,5 +1083,6 @@ ktBreakContinueTargets(
 
 ktExtensionFunctions(
   unique int id: @method ref,
-  int typeid: @type ref
+  int typeid: @type ref,
+  int kttypeid: @kt_type ref
 )

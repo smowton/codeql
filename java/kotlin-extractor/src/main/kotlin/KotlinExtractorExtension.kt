@@ -287,10 +287,6 @@ open class KotlinUsesExtractor(
     data class TypeResult<LabelType>(val id: Label<LabelType>, val signature: String)
     data class TypeResults(val javaResult: TypeResult<out DbType>, val kotlinResult: TypeResult<out DbKt_type>)
 
-    fun useTypeOld(t: IrType, canReturnPrimitiveTypes: Boolean = true): Label<out DbType> {
-        return useType(t, canReturnPrimitiveTypes).javaResult.id
-    }
-
     fun useType(t: IrType, canReturnPrimitiveTypes: Boolean = true): TypeResults {
         when(t) {
             is IrSimpleType -> return useSimpleType(t, canReturnPrimitiveTypes)
@@ -387,6 +383,31 @@ open class KotlinUsesExtractor(
         extractClassCommon(c, id)
 
         return id
+    }
+
+    fun useSimpleTypeClass(c: IrClass, args: List<IrTypeArgument>, hasQuestionMark: Boolean): TypeResults {
+        val classInstanceResult = useClassInstance(c, args)
+        val javaClassId = classInstanceResult.classLabel
+        val kotlinQualClassName = getUnquotedClassLabel(c, args)
+        val javaQualClassName = classInstanceResult.javaClass.fqNameForIrSerialization.asString()
+        val javaSignature = javaQualClassName // TODO: Is this right?
+        val javaResult = TypeResult(javaClassId, javaSignature)
+        val kotlinResult = if (hasQuestionMark) {
+                val kotlinSignature = "$kotlinQualClassName?" // TODO: Is this right?
+                val kotlinLabel = "@\"kt_type;nullable;$kotlinQualClassName\""
+                val kotlinId: Label<DbKt_nullable_type> = tw.getLabelFor(kotlinLabel, {
+                    tw.writeKt_nullable_types(it, javaClassId)
+                })
+                TypeResult(kotlinId, kotlinSignature)
+            } else {
+                val kotlinSignature = kotlinQualClassName // TODO: Is this right?
+                val kotlinLabel = "@\"kt_type;notnull;$kotlinQualClassName\""
+                val kotlinId: Label<DbKt_notnull_type> = tw.getLabelFor(kotlinLabel, {
+                    tw.writeKt_notnull_types(it, javaClassId)
+                })
+                TypeResult(kotlinId, kotlinSignature)
+            }
+        return TypeResults(javaResult, kotlinResult)
     }
 
     fun useSimpleType(s: IrSimpleType, canReturnPrimitiveTypes: Boolean): TypeResults {
@@ -486,9 +507,9 @@ class X {
 
             s.isArray() && s.arguments.isNotEmpty() -> {
                 // TODO: fix this, this is only a dummy implementation to let the tests pass
-                val elementType = useTypeOld(s.getArrayElementType(pluginContext.irBuiltIns))
+                val elementType = useType(s.getArrayElementType(pluginContext.irBuiltIns))
                 val id = tw.getLabelFor<DbArray>("@\"array;1;{$elementType}\"")
-                tw.writeArrays(id, "ARRAY", elementType, 1, elementType)
+                tw.writeArrays(id, "ARRAY", elementType.javaResult.id, elementType.kotlinResult.id, 1, elementType.javaResult.id, elementType.kotlinResult.id)
                 val javaSignature = "an array" // TODO: Wrong
                 val javaResult = TypeResult(id, javaSignature)
                 val aClassId = makeClass("kotlin", "Array") // TODO: Wrong
@@ -514,28 +535,7 @@ class X {
                 val classifier: IrClassifierSymbol = s.classifier
                 val cls: IrClass = classifier.owner as IrClass
 
-                val classInstanceResult = useClassInstance(cls, s.arguments)
-                val javaClassId = classInstanceResult.classLabel
-                val kotlinQualClassName = getUnquotedClassLabel(cls, s.arguments)
-                val javaQualClassName = classInstanceResult.javaClass.fqNameForIrSerialization.asString()
-                val javaSignature = javaQualClassName // TODO: Is this right?
-                val javaResult = TypeResult(javaClassId, javaSignature)
-                val kotlinResult = if (s.hasQuestionMark) {
-                        val kotlinSignature = "$kotlinQualClassName?" // TODO: Is this right?
-                        val kotlinLabel = "@\"kt_type;nullable;$kotlinQualClassName\""
-                        val kotlinId: Label<DbKt_nullable_type> = tw.getLabelFor(kotlinLabel, {
-                            tw.writeKt_nullable_types(it, javaClassId)
-                        })
-                        TypeResult(kotlinId, kotlinSignature)
-                    } else {
-                        val kotlinSignature = kotlinQualClassName // TODO: Is this right?
-                        val kotlinLabel = "@\"kt_type;notnull;$kotlinQualClassName\""
-                        val kotlinId: Label<DbKt_notnull_type> = tw.getLabelFor(kotlinLabel, {
-                            tw.writeKt_notnull_types(it, javaClassId)
-                        })
-                        TypeResult(kotlinId, kotlinSignature)
-                    }
-                return TypeResults(javaResult, kotlinResult)
+                return useSimpleTypeClass(cls, s.arguments, s.hasQuestionMark)
             }
             s.classifier.owner is IrTypeParameter -> {
                 val javaId = useTypeParameter(s.classifier.owner as IrTypeParameter)
@@ -583,8 +583,8 @@ class X {
     }
 
     fun getFunctionLabel(parent: IrDeclarationParent, name: String, parameters: List<IrValueParameter>, returnType: IrType) : String {
-        val paramTypeIds = parameters.joinToString() { "{${useTypeOld(erase(it.type)).toString()}}" }
-        val returnTypeId = useTypeOld(erase(returnType))
+        val paramTypeIds = parameters.joinToString() { "{${useType(erase(it.type)).javaResult.id.toString()}}" }
+        val returnTypeId = useType(erase(returnType)).javaResult.id
         val parentId = useDeclarationParent(parent)
         val label = "@\"callable;{$parentId}.$name($paramTypeIds){$returnTypeId}\""
         return label
@@ -609,7 +609,7 @@ class X {
             }
             is IrTypeProjection -> {
                 @Suppress("UNCHECKED_CAST")
-                return useTypeOld(arg.type, false) as Label<out DbReftype>
+                return useType(arg.type, false).javaResult.id as Label<out DbReftype>
             }
             else -> {
                 logger.warn(Severity.ErrorSevere, "Unexpected type argument.")
@@ -890,9 +890,9 @@ open class KotlinFileExtractor(
 
     fun extractValueParameter(vp: IrValueParameter, parent: Label<out DbCallable>, idx: Int) {
         val id = useValueParameter(vp)
-        val typeId = useTypeOld(vp.type)
+        val type = useType(vp.type)
         val locId = tw.getLocation(vp.startOffset, vp.endOffset)
-        tw.writeParams(id, typeId, idx, parent, id)
+        tw.writeParams(id, type.javaResult.id, type.kotlinResult.id, idx, parent, id)
         tw.writeHasLocation(id, locId)
         tw.writeParamName(id, vp.name.asString())
     }
@@ -907,8 +907,8 @@ open class KotlinFileExtractor(
         var obinitLabel = getFunctionLabel(c, "<obinit>", listOf(), pluginContext.irBuiltIns.unitType)
         val obinitId = tw.getLabelFor<DbMethod>(obinitLabel)
         val signature = "TODO"
-        val returnTypeId = useTypeOld(pluginContext.irBuiltIns.unitType)
-        tw.writeMethods(obinitId, "<obinit>", signature, returnTypeId, parentId, obinitId)
+        val returnType = useType(pluginContext.irBuiltIns.unitType)
+        tw.writeMethods(obinitId, "<obinit>", signature, returnType.javaResult.id, returnType.kotlinResult.id, parentId, obinitId)
 
         val locId = tw.getLocation(c)
         tw.writeHasLocation(obinitId, locId)
@@ -972,18 +972,18 @@ open class KotlinFileExtractor(
 
         val id: Label<out DbCallable>
         if (f.symbol is IrConstructorSymbol) {
-            val returnTypeId = useTypeOld(erase(f.returnType))
+            val returnType = useType(erase(f.returnType))
             id = useFunction<DbConstructor>(f)
-            tw.writeConstrs(id, f.returnType.classFqName?.shortName()?.asString() ?: f.name.asString(), signature, returnTypeId, parentId, id)
+            tw.writeConstrs(id, f.returnType.classFqName?.shortName()?.asString() ?: f.name.asString(), signature, returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
         } else {
-            val returnTypeId = useTypeOld(f.returnType)
+            val returnType = useType(f.returnType)
             id = useFunction<DbMethod>(f)
-            tw.writeMethods(id, f.name.asString(), signature, returnTypeId, parentId, id)
+            tw.writeMethods(id, f.name.asString(), signature, returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
 
             val extReceiver = f.extensionReceiverParameter
             if (extReceiver != null) {
-                val extendedType = useTypeOld(extReceiver.type)
-                tw.writeKtExtensionFunctions(id, extendedType)
+                val extendedType = useType(extReceiver.type)
+                tw.writeKtExtensionFunctions(id, extendedType.javaResult.id, extendedType.kotlinResult.id)
             }
         }
 
@@ -1006,8 +1006,8 @@ open class KotlinFileExtractor(
         } else {
             val id = useProperty(p)
             val locId = tw.getLocation(p)
-            val typeId = useTypeOld(bf.type)
-            tw.writeFields(id, p.name.asString(), typeId, parentId, id)
+            val type = useType(bf.type)
+            tw.writeFields(id, p.name.asString(), type.javaResult.id, type.kotlinResult.id, parentId, id)
             tw.writeHasLocation(id, locId)
         }
     }
@@ -1015,8 +1015,16 @@ open class KotlinFileExtractor(
     fun extractEnumEntry(ee: IrEnumEntry, parentId: Label<out DbReftype>) {
         val id = useEnumEntry(ee)
         val locId = tw.getLocation(ee)
-        tw.writeFields(id, ee.name.asString(), parentId, parentId, id)
-        tw.writeHasLocation(id, locId)
+        val parent = ee.parent
+        if(parent !is IrClass) {
+            logger.warnElement(Severity.ErrorSevere, "Enum entry with unexpected parent: " + parent.javaClass, ee)
+        } else if (!parent.typeParameters.isEmpty()) {
+            logger.warnElement(Severity.ErrorSevere, "Enum entry parent class has type parameters: " + parent.name, ee)
+        } else {
+            val type = useSimpleTypeClass(parent, emptyList(), false)
+            tw.writeFields(id, ee.name.asString(), type.javaResult.id, type.kotlinResult.id, parentId, id)
+            tw.writeHasLocation(id, locId)
+        }
     }
 
     fun extractBody(b: IrBody, callable: Label<out DbCallable>) {
@@ -1049,7 +1057,7 @@ open class KotlinFileExtractor(
         val exprId = tw.getFreshIdLabel<DbLocalvariabledeclexpr>()
         val locId = tw.getLocation(v)
         val type = useType(v.type)
-        tw.writeLocalvars(varId, v.name.asString(), type.javaResult.id, exprId) // TODO: KT type
+        tw.writeLocalvars(varId, v.name.asString(), type.javaResult.id, type.kotlinResult.id, exprId)
         tw.writeHasLocation(varId, locId)
         tw.writeExprs_localvariabledeclexpr(exprId, type.javaResult.id, type.kotlinResult.id, parent, idx)
         tw.writeHasLocation(exprId, locId)

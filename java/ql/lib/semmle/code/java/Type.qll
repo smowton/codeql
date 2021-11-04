@@ -259,11 +259,11 @@ private predicate hasSubtypeStar(RefType t, RefType sub) {
 
 /** Holds if type `t` declares member `m`. */
 predicate declaresMember(Type t, @member m) {
-  methods(m, _, _, _, t, _)
+  methods(m, _, _, _, _, t, _)
   or
-  constrs(m, _, _, _, t, _)
+  constrs(m, _, _, _, _, t, _)
   or
-  fields(m, _, _, t, _)
+  fields(m, _, _, _, t, _)
   or
   enclInReftype(m, t) and
   // Since the type `@member` in the dbscheme includes all `@reftype`s,
@@ -298,21 +298,35 @@ class Array extends RefType, @array {
    *
    * For example, the component type of `Object[][]` is `Object[]`.
    */
-  Type getComponentType() { arrays(this, _, _, _, result) }
+  Type getComponentType() { arrays(this, _, _, _, _, result, _) }
 
   /**
-   * Gets the type of the elements used to construct this array type.
+   * Gets the type of the components of this array type.
+   *
+   * For example, the component type of `Object[][]` is `Object[]`.
+   */
+  KotlinType getComponentKotlinType() { arrays(this, _, _, _, _, _, result) }
+
+  /**
+   * Gets the Kotlin type of the elements used to construct this array type.
    *
    * For example, the element type of `Object[][]` is `Object`.
    */
-  Type getElementType() { arrays(this, _, result, _, _) }
+  Type getElementType() { arrays(this, _, result, _, _, _, _) }
+
+  /**
+   * Gets the Kotlin type of the elements used to construct this array type.
+   *
+   * For example, the element type of `Object[][]` is `Object`.
+   */
+  KotlinType getElementKotlinType() { arrays(this, _, _, result, _, _, _) }
 
   /**
    * Gets the arity of this array type.
    *
    * For example, the dimension of `Object[][]` is 2.
    */
-  int getDimension() { arrays(this, _, _, result, _) }
+  int getDimension() { arrays(this, _, _, _, result, _, _) }
 
   /**
    * Gets the JVM descriptor for this type, as used in bytecode.
@@ -449,16 +463,16 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
       sup.hasNonInterfaceMethod(m, declaringType, h2) and
       hidden = h1.booleanOr(h2) and
       exists(string signature |
-        methods(m, _, signature, _, _, _) and not methods(_, _, signature, _, this, _)
+        methods(m, _, signature, _, _, _, _) and not methods(_, _, signature, _, _, this, _)
       ) and
       m.isInheritable()
     )
   }
 
   private predicate cannotInheritInterfaceMethod(string signature) {
-    methods(_, _, signature, _, this, _)
+    methods(_, _, signature, _, _, this, _)
     or
-    exists(Method m | this.hasNonInterfaceMethod(m, _, false) and methods(m, _, signature, _, _, _))
+    exists(Method m | this.hasNonInterfaceMethod(m, _, false) and methods(m, _, signature, _, _, _, _))
   }
 
   private predicate interfaceMethodCandidateWithSignature(
@@ -467,7 +481,7 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
     m = this.getAMethod() and
     this = declaringType and
     declaringType instanceof Interface and
-    methods(m, _, signature, _, _, _)
+    methods(m, _, signature, _, _, _, _)
     or
     exists(RefType sup |
       sup.interfaceMethodCandidateWithSignature(m, signature, declaringType) and
@@ -1041,11 +1055,11 @@ class EnumType extends Class {
 
   /** Gets the enum constant with the specified name. */
   EnumConstant getEnumConstant(string name) {
-    fields(result, _, _, this, _) and result.hasName(name)
+    fields(result, _, _, _, this, _) and result.hasName(name)
   }
 
   /** Gets an enum constant declared in this enum type. */
-  EnumConstant getAnEnumConstant() { fields(result, _, _, this, _) }
+  EnumConstant getAnEnumConstant() { fields(result, _, _, _, this, _) }
 
   override predicate isFinal() {
     // JLS 8.9: An enum declaration is implicitly `final` unless it contains

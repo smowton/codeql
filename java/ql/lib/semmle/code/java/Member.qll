@@ -57,8 +57,17 @@ class Callable extends StmtParent, Member, @callable {
    * constructors).
    */
   Type getReturnType() {
-    constrs(this, _, _, result, _, _) or
-    methods(this, _, _, result, _, _)
+    constrs(this, _, _, result, _, _, _) or
+    methods(this, _, _, result, _, _, _)
+  }
+
+  /**
+   * Gets the declared return Kotlin type of this callable (`Nothing` for
+   * constructors).
+   */
+  KotlinType getReturnKotlinType() {
+    constrs(this, _, _, _, result, _, _) or
+    methods(this, _, _, _, result, _, _)
   }
 
   /**
@@ -177,10 +186,13 @@ class Callable extends StmtParent, Member, @callable {
   Parameter getAParameter() { result.getCallable() = this }
 
   /** Gets the formal parameter at the specified (zero-based) position. */
-  Parameter getParameter(int n) { params(result, _, n, this, _) }
+  Parameter getParameter(int n) { params(result, _, _, n, this, _) }
 
   /** Gets the type of the formal parameter at the specified (zero-based) position. */
-  Type getParameterType(int n) { params(_, result, n, this, _) }
+  Type getParameterType(int n) { params(_, result, _, n, this, _) }
+
+  /** Gets the type of the formal parameter at the specified (zero-based) position. */
+  KotlinType getParameterKotlinType(int n) { params(_, _, result, n, this, _) }
 
   /**
    * Gets the signature of this callable, including its name and the types of all
@@ -273,8 +285,8 @@ class Callable extends StmtParent, Member, @callable {
    * For example, method `void m(String s, int i)` has the signature `m(java.lang.String,int)`.
    */
   string getSignature() {
-    constrs(this, _, result, _, _, _) or
-    methods(this, _, result, _, _, _)
+    constrs(this, _, result, _, _, _, _) or
+    methods(this, _, result, _, _, _, _)
   }
 }
 
@@ -304,7 +316,7 @@ predicate overridesIgnoringAccess(Method m1, RefType t1, Method m2, RefType t2) 
 }
 
 private predicate virtualMethodWithSignature(string sig, RefType t, Method m) {
-  methods(m, _, _, _, t, _) and
+  methods(m, _, _, _, _, t, _) and
   sig = m.getSignature() and
   m.isVirtual()
 }
@@ -353,7 +365,7 @@ class Method extends Callable, @method {
     exists(Method m | this.overrides(m) and result = m.getSourceDeclaration())
   }
 
-  override string getSignature() { methods(this, _, result, _, _, _) }
+  override string getSignature() { methods(this, _, result, _, _, _, _) }
 
   /**
    * Holds if this method and method `m` are declared in the same type
@@ -370,7 +382,7 @@ class Method extends Callable, @method {
     not exists(int n | this.getParameterType(n) != m.getParameterType(n))
   }
 
-  override SrcMethod getSourceDeclaration() { methods(this, _, _, _, _, result) }
+  override SrcMethod getSourceDeclaration() { methods(this, _, _, _, _, _, result) }
 
   /**
    * All the methods that could possibly be called when this method
@@ -444,7 +456,7 @@ class Method extends Callable, @method {
 
 /** A method that is the same as its source declaration. */
 class SrcMethod extends Method {
-  SrcMethod() { methods(_, _, _, _, _, this) }
+  SrcMethod() { methods(_, _, _, _, _, _, this) }
 
   /**
    * All the methods that could possibly be called when this method
@@ -530,9 +542,9 @@ class Constructor extends Callable, @constructor {
   /** Holds if this is a default constructor, not explicitly declared in source code. */
   predicate isDefaultConstructor() { isDefConstr(this) }
 
-  override Constructor getSourceDeclaration() { constrs(this, _, _, _, _, result) }
+  override Constructor getSourceDeclaration() { constrs(this, _, _, _, _, _, result) }
 
-  override string getSignature() { constrs(this, _, result, _, _, _) }
+  override string getSignature() { constrs(this, _, result, _, _, _, _) }
 
   override string getAPrimaryQlClass() { result = "Constructor" }
 }
@@ -586,10 +598,13 @@ class FieldDeclaration extends ExprParent, @fielddecl, Annotatable {
 /** A class or instance field. */
 class Field extends Member, ExprParent, @field, Variable {
   /** Gets the declared type of this field. */
-  override Type getType() { fields(this, _, result, _, _) }
+  override Type getType() { fields(this, _, result, _, _, _) }
+
+  /** Gets the Kotlin type of this field. */
+  override KotlinType getKotlinType() { fields(this, _, _, result, _, _) }
 
   /** Gets the type in which this field is declared. */
-  override RefType getDeclaringType() { fields(this, _, _, result, _) }
+  override RefType getDeclaringType() { fields(this, _, _, _, result, _) }
 
   /**
    * Gets the field declaration in which this field is declared.
@@ -619,7 +634,7 @@ class Field extends Member, ExprParent, @field, Variable {
    *
    * For all other fields, the source declaration is the field itself.
    */
-  Field getSourceDeclaration() { fields(this, _, _, _, result) }
+  Field getSourceDeclaration() { fields(this, _, _, _, _, result) }
 
   /** Holds if this field is the same as its source declaration. */
   predicate isSourceDeclaration() { this.getSourceDeclaration() = this }
@@ -662,11 +677,15 @@ class InstanceField extends Field {
 /** A Kotlin extension function. */
 class ExtensionMethod extends Method {
   Type extendedType;
+  KotlinType extendedKotlinType;
 
-  ExtensionMethod() { ktExtensionFunctions(this, extendedType) }
+  ExtensionMethod() { ktExtensionFunctions(this, extendedType, extendedKotlinType) }
 
   /** Gets the type being extended by this method. */
   Type getExtendedType() { result = extendedType }
+
+  /** Gets the Kotlin type being extended by this method. */
+  KotlinType getExtendedKotlinType() { result = extendedKotlinType }
 
   override string getAPrimaryQlClass() { result = "ExtensionMethod" }
 }
