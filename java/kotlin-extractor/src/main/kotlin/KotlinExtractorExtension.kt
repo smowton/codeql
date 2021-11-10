@@ -27,7 +27,9 @@ import com.intellij.openapi.vfs.StandardFileSystems
 import com.semmle.extractor.java.OdasaOutput
 import com.semmle.extractor.java.OdasaOutput.TrapFileManager
 import com.semmle.util.files.FileUtil
+import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.types.Variance
 import kotlin.system.exitProcess
 
 class KotlinExtractorExtension(private val invocationTrapFile: String, private val checkTrapIdentical: Boolean) : IrGenerationExtension {
@@ -265,6 +267,34 @@ class KotlinSourceFileExtractor(
 
 }
 
+data class PrimitiveTypeInfo(
+    val primitiveName: String?,
+    val javaPackageName: String, val javaClassName: String,
+    val kotlinPackageName: String, val kotlinClassName: String
+)
+
+val primitiveTypeMapping = mapOf(
+    IdSignatureValues._byte to PrimitiveTypeInfo("byte", "java.lang", "Byte", "kotlin", "Byte"),
+    IdSignatureValues._short to PrimitiveTypeInfo("short", "java.lang", "Short", "kotlin", "Short"),
+    IdSignatureValues._int to PrimitiveTypeInfo("int", "java.lang", "Integer", "kotlin", "Int"),
+    IdSignatureValues._long to PrimitiveTypeInfo("long", "java.lang", "Long", "kotlin", "Long"),
+
+    IdSignatureValues.uByte to PrimitiveTypeInfo("byte", "kotlin", "UByte", "kotlin", "UByte"),
+    IdSignatureValues.uShort to PrimitiveTypeInfo("short", "kotlin", "UShort", "kotlin", "UShort"),
+    IdSignatureValues.uInt to PrimitiveTypeInfo("int", "kotlin", "UInt", "kotlin", "UInt"),
+    IdSignatureValues.uLong to PrimitiveTypeInfo("long", "kotlin", "ULong", "kotlin", "ULong"),
+
+    IdSignatureValues._double to PrimitiveTypeInfo("double", "java.lang", "Double", "kotlin", "Double"),
+    IdSignatureValues._float to PrimitiveTypeInfo("float", "java.lang", "Float", "kotlin", "Float"),
+
+    IdSignatureValues._boolean to PrimitiveTypeInfo("boolean", "java.lang", "Boolean", "kotlin", "Boolean"),
+
+    IdSignatureValues._char to PrimitiveTypeInfo("char", "java.lang", "Character", "kotlin", "Char"),
+
+    IdSignatureValues.unit to PrimitiveTypeInfo("void", "java.lang", "Void", "kotlin", "Nothing"), // TODO: Is this right?
+    IdSignatureValues.nothing to PrimitiveTypeInfo(null, "java.lang", "Void", "kotlin", "Nothing"), // TODO: Is this right?
+)
+
 open class KotlinUsesExtractor(
     open val logger: Logger,
     open val tw: TrapWriter,
@@ -297,15 +327,18 @@ open class KotlinUsesExtractor(
         }
     }
 
+    fun getJavaEquivalentClass(c: IrClass) =
+        c.fqNameWhenAvailable?.toUnsafe()
+            ?.let { JavaToKotlinClassMap.mapKotlinToJava(it) }
+            ?.let { pluginContext.referenceClass(it.asSingleFqName()) }
+            ?.owner
+
     fun useClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): UseClassInstanceResult {
         // TODO: only substitute in class and function signatures
         //       because within function bodies we can get things like Unit.INSTANCE
         //       and List.asIterable (an extension, i.e. static, method)
         // Map Kotlin class to its equivalent Java class:
-        val substituteClass = c.fqNameWhenAvailable?.toUnsafe()
-            ?.let { JavaToKotlinClassMap.mapKotlinToJava(it) }
-            ?.let { pluginContext.referenceClass(it.asSingleFqName()) }
-            ?.owner
+        val substituteClass = getJavaEquivalentClass(c)
 
         val extractClass = substituteClass ?: c
 
@@ -346,6 +379,59 @@ open class KotlinUsesExtractor(
         return id
     }
 
+    fun shortName(type: IrType, canReturnPrimitiveTypes: Boolean = true): String =
+        when(type) {
+            is IrSimpleType -> {
+                val primitiveInfo = primitiveTypeMapping[type.classifier.signature]
+                when {
+                    primitiveInfo?.primitiveName != null ->
+                        if (type.hasQuestionMark || !canReturnPrimitiveTypes)
+                            primitiveInfo.javaClassName
+                        else
+                            primitiveInfo.primitiveName
+
+                    type.isBoxedArray || type.isPrimitiveArray() -> shortName(type.getArrayElementType(pluginContext.irBuiltIns)) + "[]"
+
+                    type.classifier.owner is IrClass -> {
+                        val c = type.classifier.owner as IrClass
+                        classShortName(getJavaEquivalentClass(c) ?: c, type.arguments)
+                    }
+
+                    type.classifier.owner is IrTypeParameter -> (type.classifier.owner as IrTypeParameter).name.asString()
+
+                    else -> "???"
+                }
+            }
+            else -> "???"
+        }
+
+    // Pretty-print typeArg the same way the Java extractor would:
+    fun typeArgShortName(typeArg: IrTypeArgument): String =
+        when(typeArg) {
+            is IrStarProjection -> "?"
+            is IrTypeProjection -> {
+                val prefix = when(typeArg.variance) {
+                    Variance.INVARIANT -> ""
+                    Variance.OUT_VARIANCE -> "? extends "
+                    Variance.IN_VARIANCE -> "? super "
+                }
+                "$prefix${shortName(typeArg.type, false)}"
+            }
+            else -> {
+                logger.warn(Severity.ErrorSevere, "Unexpected type argument.")
+                "???"
+            }
+        }
+
+    fun typeArgsShortName(typeArgs: List<IrTypeArgument>): String {
+        if(typeArgs.isEmpty())
+            return ""
+        return typeArgs.joinToString(prefix = "<", postfix = ">", separator = ",") { typeArgShortName(it) }
+    }
+
+    fun classShortName(c: IrClass, typeArgs: List<IrTypeArgument>) =
+        "${c.name}${typeArgsShortName(typeArgs)}"
+
     fun extractClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): Label<out DbClassorinterface> {
         if (typeArgs.isEmpty()) {
             logger.warn(Severity.ErrorSevere, "Instance without type arguments: " + c.name.asString())
@@ -353,7 +439,7 @@ open class KotlinUsesExtractor(
 
         val id = addClassLabel(c, typeArgs)
         val pkg = c.packageFqName?.asString() ?: ""
-        val cls = c.name.asString()
+        val cls = classShortName(c, typeArgs)
         val pkgId = extractPackage(pkg)
         if(c.kind == ClassKind.INTERFACE) {
             @Suppress("UNCHECKED_CAST")
@@ -425,7 +511,7 @@ open class KotlinUsesExtractor(
             })
             return classId
         }
-        fun primitiveType(primitiveName: String?,
+        fun primitiveType(kotlinClass: IrClass, primitiveName: String?,
                           javaPackageName: String, javaClassName: String,
                           kotlinPackageName: String, kotlinClassName: String): TypeResults {
             val javaResult = if (canReturnPrimitiveTypes && !s.hasQuestionMark && primitiveName != null) {
@@ -438,7 +524,7 @@ open class KotlinUsesExtractor(
                     val signature = "$javaPackageName.$javaClassName" // TODO: Is this right?
                     TypeResult(label, signature)
                 }
-            val kotlinClassId = makeClass(kotlinPackageName, kotlinClassName)
+            val kotlinClassId = useClassInstance(kotlinClass, listOf()).classLabel
             val kotlinResult = if (s.hasQuestionMark) {
                     val kotlinSignature = "$kotlinPackageName.$kotlinClassName?" // TODO: Is this right?
                     val kotlinLabel = "@\"kt_type;nullable;$kotlinPackageName.$kotlinClassName\""
@@ -457,6 +543,8 @@ open class KotlinUsesExtractor(
             return TypeResults(javaResult, kotlinResult)
         }
 
+        val primitiveInfo = primitiveTypeMapping[s.classifier.signature]
+
         when {
 /*
 XXX delete?
@@ -469,26 +557,11 @@ XXX delete?
             }
 
 */
-            s.isByte() -> return primitiveType("byte", "java.lang", "Byte", "kotlin", "Byte")
-            s.isShort() -> return primitiveType("short", "java.lang", "Short", "kotlin", "Short")
-            s.isInt() -> return primitiveType("int", "java.lang", "Integer", "kotlin", "Int")
-            s.isLong() -> return primitiveType("long", "java.lang", "Long", "kotlin", "Long")
-            s.isUByte() -> return primitiveType("byte", "kotlin", "UByte", "kotlin", "UByte")
-            s.isUShort() -> return primitiveType("short", "kotlin", "UShort", "kotlin", "UShort")
-            s.isUInt() -> return primitiveType("int", "kotlin", "UInt", "kotlin", "UInt")
-            s.isULong() -> return primitiveType("long", "kotlin", "ULong", "kotlin", "ULong")
-
-            s.isDouble() -> return primitiveType("double", "java.lang", "Double", "kotlin", "Double")
-            s.isFloat() -> return primitiveType("float", "java.lang", "Float", "kotlin", "Float")
-
-            s.isBoolean() -> return primitiveType("boolean", "java.lang", "Boolean", "kotlin", "Boolean")
-
-            s.isChar() -> return primitiveType("char", "java.lang", "Character", "kotlin", "Char")
-            s.isString() -> return primitiveType(null, "java.lang", "String", "kotlin", "String")
-
-            s.isUnit() -> return primitiveType("void", "java.lang", "Void", "kotlin", "Nothing") // TODO: Is this right?
-            s.isNothing() -> return primitiveType(null, "java.lang", "Void", "kotlin", "Nothing") // TODO: Is this right?
-
+            primitiveInfo != null -> return primitiveType(
+                s.classifier.owner as IrClass,
+                primitiveInfo.primitiveName, primitiveInfo.javaPackageName,
+                primitiveInfo.javaClassName, primitiveInfo.kotlinPackageName, primitiveInfo.kotlinClassName
+            )
 /*
 TODO: Test case: nullable and has-question-mark type variables:
 class X {
@@ -509,29 +582,63 @@ class X {
 }
 */
 
-            s.isArray() && s.arguments.isNotEmpty() -> {
+            (s.isBoxedArray && s.arguments.isNotEmpty()) || s.isPrimitiveArray() -> {
                 // TODO: fix this, this is only a dummy implementation to let the tests pass
-                val elementType = useType(s.getArrayElementType(pluginContext.irBuiltIns))
-                val id = tw.getLabelFor<DbArray>("@\"array;1;{$elementType}\"")
-                tw.writeArrays(id, "ARRAY", elementType.javaResult.id, elementType.kotlinResult.id, 1, elementType.javaResult.id, elementType.kotlinResult.id)
+                // TODO: Figure out what signatures should be returned
+                // TODO: Generate a short name for array types
+
+                var dimensions = 1
+                val componentType = s.getArrayElementType(pluginContext.irBuiltIns)
+                var elementType = componentType
+                while (elementType.isBoxedArray || elementType.isPrimitiveArray()) {
+                    dimensions++
+                    elementType = elementType.getArrayElementType(pluginContext.irBuiltIns)
+                }
+
+                val componentTypeLabel = useType(componentType)
+                val elementTypeLabel = useType(elementType)
+
+                fun kotlinLabelOfJavaType(type: IrType, typeLabel: Label<out DbKt_type>) =
+                    if (type.isPrimitiveType())
+                        // Java lowering distinguishes nullable and non-nullable, so keep the existing label
+                        typeLabel
+                    else
+                        // Java lowering always concerns the nullable type, so get the nullable equivalent
+                        useType(type.makeNullable()).kotlinResult.id
+
+                val kotlinComponentTypeLabel = kotlinLabelOfJavaType(componentType, componentTypeLabel.kotlinResult.id)
+                val kotlinElementTypeLabel = kotlinLabelOfJavaType(elementType, elementTypeLabel.kotlinResult.id)
+
+                val id = tw.getLabelFor<DbArray>("@\"array;$dimensions;{${elementTypeLabel.javaResult.id}}\"") {
+                    tw.writeArrays(it, shortName(s), elementTypeLabel.javaResult.id, kotlinElementTypeLabel, 1, componentTypeLabel.javaResult.id, kotlinComponentTypeLabel)
+
+                    extractClassCommon(s.classifier.owner as IrClass, it)
+
+                    // array.length
+                    val length = tw.getLabelFor<DbField>("@\"field;{$it};length\"")
+                    val intTypeIds = useType(pluginContext.irBuiltIns.intType)
+                    tw.writeFields(length, "length", intTypeIds.javaResult.id, intTypeIds.kotlinResult.id, it, length)
+                    // TODO: modifiers
+                    // tw.writeHasModifier(length, getModifierKey("public"))
+                    // tw.writeHasModifier(length, getModifierKey("final"))
+                }
+
                 val javaSignature = "an array" // TODO: Wrong
                 val javaResult = TypeResult(id, javaSignature)
-                val aClassId = makeClass("kotlin", "Array") // TODO: Wrong
-                val kotlinResult = if (s.hasQuestionMark) {
-                        val kotlinSignature = "$javaSignature?" // TODO: Wrong
-                        val kotlinLabel = "@\"kt_type;nullable;array\"" // TODO: Wrong
-                        val kotlinId: Label<DbKt_nullable_type> = tw.getLabelFor(kotlinLabel, {
-                            tw.writeKt_nullable_types(it, aClassId)
-                        })
-                        TypeResult(kotlinId, kotlinSignature)
-                    } else {
-                        val kotlinSignature = "$javaSignature" // TODO: Wrong
-                        val kotlinLabel = "@\"kt_type;notnull;array\"" // TODO: Wrong
-                        val kotlinId: Label<DbKt_notnull_type> = tw.getLabelFor(kotlinLabel, {
-                            tw.writeKt_notnull_types(it, aClassId)
-                        })
-                        TypeResult(kotlinId, kotlinSignature)
-                    }
+                val kotlinClassName = getUnquotedClassLabel(s.classifier.owner as IrClass, listOf(makeTypeProjection(componentType, Variance.INVARIANT)))
+                val kotlinSignature = "$javaSignature?" // TODO: Wrong
+                val kotlinLabel = "@\"kt_type;nullable;${kotlinClassName}\""
+                val kotlinId: Label<DbKt_nullable_type> = tw.getLabelFor(kotlinLabel, {
+                    tw.writeKt_nullable_types(it, id)
+                })
+                val kotlinResult = TypeResult(kotlinId, kotlinSignature)
+
+                tw.getLabelFor<DbMethod>("@\"callable;{$id}.clone(){$id}\"") {
+                    tw.writeMethods(it, "clone", "clone()", javaResult.id, kotlinResult.id, javaResult.id, it)
+                    // TODO: modifiers
+                    // tw.writeHasModifier(clone, getModifierKey("public"))
+                }
+
                 return TypeResults(javaResult, kotlinResult)
             }
 
@@ -606,14 +713,25 @@ class X {
         when (arg) {
             is IrStarProjection -> {
                 val wildcardLabel = "@\"wildcard;\""
-                val wildcardId: Label<DbWildcard> = tw.getLabelFor(wildcardLabel)
-                tw.writeWildcards(wildcardId, "*", 1)
-                tw.writeHasLocation(wildcardId, tw.unknownLocation)
-                return wildcardId
+                return tw.getLabelFor<DbWildcard>(wildcardLabel) {
+                    tw.writeWildcards(it, "*", 1)
+                    tw.writeHasLocation(it, tw.unknownLocation)
+                }
             }
             is IrTypeProjection -> {
                 @Suppress("UNCHECKED_CAST")
-                return useType(arg.type, false).javaResult.id as Label<out DbReftype>
+                val boundLabel = useType(arg.type, false).javaResult.id as Label<out DbReftype>
+
+                return if(arg.variance == Variance.INVARIANT)
+                    boundLabel
+                else {
+                    val keyPrefix = if (arg.variance == Variance.IN_VARIANCE) "super" else "extends"
+                    val wildcardKind = if (arg.variance == Variance.IN_VARIANCE) 2 else 1
+                    tw.getLabelFor<DbWildcard>("@\"wildcard;$keyPrefix{$boundLabel}\"") {
+                        tw.writeWildcards(it, typeArgShortName(arg), wildcardKind)
+                        tw.writeHasLocation(it, tw.unknownLocation)
+                    }
+                }
             }
             else -> {
                 logger.warn(Severity.ErrorSevere, "Unexpected type argument.")
@@ -672,7 +790,7 @@ class X {
         return tw.getLabelFor(l)
     }
 
-    fun extractClassCommon(c: IrClass, id: Label<out DbClassorinterface>) {
+    fun extractClassCommon(c: IrClass, id: Label<out DbReftype>) {
         for(t in c.superTypes) {
             when(t) {
                 is IrSimpleType -> {
