@@ -368,12 +368,24 @@ open class KotlinUsesExtractor(
         return UseClassInstanceResult(classLabel, extractClass)
     }
 
+    fun isExternalDeclaration(d: IrDeclaration): Boolean {
+        return d.origin == IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB ||
+               d.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
+    }
+
     fun extractClassLaterIfExternal(c: IrClass) {
-        // we don't have an "external dependencies" extractor yet,
-        // so for now we extract the source class for those too
-        if (c.origin == IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB ||
-            c.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) {
+        if (isExternalDeclaration(c)) {
             extractExternalClassLater(c)
+        }
+    }
+
+    fun extractExternalEnclosingClassLater(d: IrDeclaration) {
+        val parent = d.parent
+        when (parent) {
+            is IrClass -> extractExternalClassLater(parent)
+            is IrFunction -> extractExternalEnclosingClassLater(parent)
+            is IrFile -> logger.warn(Severity.ErrorSevere, "extractExternalEnclosingClassLater but no enclosing class.")
+            else -> logger.warn(Severity.ErrorSevere, "Unrecognised extractExternalEnclosingClassLater: " + d.javaClass)
         }
     }
 
@@ -634,7 +646,8 @@ class X {
 
                 val javaSignature = "an array" // TODO: Wrong
                 val javaResult = TypeResult(id, javaSignature)
-                val kotlinClassName = getUnquotedClassLabel(s.classifier.owner as IrClass, listOf(makeTypeProjection(componentType, Variance.INVARIANT)))
+                val owner: IrClass = s.classifier.owner as IrClass
+                val kotlinClassName = getUnquotedClassLabel(owner, listOf(makeTypeProjection(componentType, Variance.INVARIANT)))
                 val kotlinSignature = "$javaSignature?" // TODO: Wrong
                 val kotlinLabel = "@\"kt_type;nullable;${kotlinClassName}\""
                 val kotlinId: Label<DbKt_nullable_type> = tw.getLabelFor(kotlinLabel, {
@@ -642,11 +655,14 @@ class X {
                 })
                 val kotlinResult = TypeResult(kotlinId, kotlinSignature)
 
+                /*
+                TODO
                 tw.getLabelFor<DbMethod>("@\"callable;{$id}.clone(){$id}\"") {
                     tw.writeMethods(it, "clone", "clone()", javaResult.id, kotlinResult.id, javaResult.id, it)
                     // TODO: modifiers
                     // tw.writeHasModifier(clone, getModifierKey("public"))
                 }
+                */
 
                 return TypeResults(javaResult, kotlinResult)
             }
@@ -713,6 +729,9 @@ class X {
     fun <T: DbCallable> useFunction(f: IrFunction): Label<out T> {
         val label = getFunctionLabel(f)
         val id: Label<T> = tw.getLabelFor(label)
+        if(isExternalDeclaration(f)) {
+            extractExternalEnclosingClassLater(f)
+        }
         return id
     }
 
@@ -1119,8 +1138,7 @@ open class KotlinFileExtractor(
     }
 
     private fun extractObjectInitializerFunction(c: IrClass, parentId: Label<out DbReftype>) {
-        if (c.origin == IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB ||
-            c.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB) {
+        if (isExternalDeclaration(c)) {
             return
         }
 
