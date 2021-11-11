@@ -11,10 +11,13 @@ class KotlinExtractorComponentRegistrar : ComponentRegistrar {
         configuration: CompilerConfiguration
     ) {
         val invocationTrapFile = configuration[KEY_INVOCATION_TRAP_FILE]
-        if(invocationTrapFile == null) {
+        if (invocationTrapFile == null) {
             throw Exception("Required argument for TRAP invocation file not given")
         }
-        val checkTrapIdentical = configuration[KEY_CHECK_TRAP_IDENTICAL]
-        IrGenerationExtension.registerExtension(project, KotlinExtractorExtension(invocationTrapFile, checkTrapIdentical ?: false))
+        IrGenerationExtension.registerExtension(project, KotlinExtractorExtension(
+            invocationTrapFile,
+            configuration[KEY_CHECK_TRAP_IDENTICAL] ?: false,
+            configuration[KEY_COMPILATION_STARTTIME],
+            configuration[KEY_EXIT_AFTER_EXTRACTION] ?: false))
     }
 }
