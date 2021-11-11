@@ -655,11 +655,14 @@ class X {
                 })
                 val kotlinResult = TypeResult(kotlinId, kotlinSignature)
 
+                /*
+                TODO
                 tw.getLabelFor<DbMethod>("@\"callable;{$id}.clone(){$id}\"") {
                     tw.writeMethods(it, "clone", "clone()", javaResult.id, kotlinResult.id, javaResult.id, it)
                     // TODO: modifiers
                     // tw.writeHasModifier(clone, getModifierKey("public"))
                 }
+                */
 
                 return TypeResults(javaResult, kotlinResult)
             }
