@@ -4,7 +4,7 @@ import com.github.codeql.comments.CommentExtractor
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
-import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
@@ -494,7 +494,8 @@ open class KotlinUsesExtractor(
         tw.writeIsParameterized(id)
         val unbound = useClassSource(c)
         tw.writeErasure(id, unbound)
-        extractClassCommon(c, id)
+        extractClassModifiers(c, id)
+        extractClassSupertypes(c, id)
 
         return id
     }
@@ -571,7 +572,7 @@ open class KotlinUsesExtractor(
                 dimensions,
                 componentTypeLabel)
 
-            extractClassCommon(arrayType.classifier.owner as IrClass, it)
+            extractClassSupertypes(arrayType.classifier.owner as IrClass, it)
 
             // array.length
             val length = tw.getLabelFor<DbField>("@\"field;{$it};length\"")
@@ -862,7 +863,21 @@ class X {
         return tw.getLabelFor(l)
     }
 
-    fun extractClassCommon(c: IrClass, id: Label<out DbReftype>) {
+    fun extractModifier(m: String): Label<DbModifier> {
+        val modifierLabel = "@\"modifier;$m\""
+        val id: Label<DbModifier> = tw.getLabelFor(modifierLabel, {
+            tw.writeModifiers(it, m)
+        })
+        return id
+    }
+
+    fun extractClassModifiers(c: IrClass, id: Label<out DbClassorinterface>) {
+        if (c.modality == Modality.ABSTRACT) {
+            tw.writeHasModifier(id, extractModifier("abstract"))
+        }
+    }
+
+    fun extractClassSupertypes(c: IrClass, id: Label<out DbReftype>) {
         for(t in c.superTypes) {
             when(t) {
                 is IrSimpleType -> {
@@ -1123,7 +1138,8 @@ open class KotlinFileExtractor(
             tw.writeClass_object(id as Label<DbClass>, instance.id)
         }
 
-        extractClassCommon(c, id)
+        extractClassModifiers(c, id)
+        extractClassSupertypes(c, id)
 
         return id
     }
@@ -2010,14 +2026,6 @@ open class KotlinFileExtractor(
                 logger.warnElement(Severity.ErrorSevere, "Unrecognised IrVarargElement: " + e.javaClass, e)
             }
         }
-    }
-
-    fun extractModifier(m: String): Label<DbModifier> {
-        val modifierLabel = "@\"modifier;$m\""
-        val id: Label<DbModifier> = tw.getLabelFor(modifierLabel, {
-            tw.writeModifiers(it, m)
-        })
-        return id
     }
 
     fun extractTypeAccess(t: IrType, callable: Label<out DbCallable>, parent: Label<out DbExprparent>, idx: Int, elementForLocation: IrElement) {
