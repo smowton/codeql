@@ -1332,7 +1332,9 @@ open class KotlinFileExtractor(
             val getterId = extractFunction(getter, parentId) as Label<out DbMethod>
             tw.writeKtPropertyGetters(id, getterId)
         } else {
-            logger.warnElement(Severity.ErrorSevere, "IrProperty without a getter", p)
+            if (p.modality != Modality.FINAL || !isExternalDeclaration(p)) {
+                logger.warnElement(Severity.ErrorSevere, "IrProperty without a getter", p)
+            }
         }
 
         if(setter != null) {
@@ -1343,7 +1345,7 @@ open class KotlinFileExtractor(
             val setterId = extractFunction(setter, parentId) as Label<out DbMethod>
             tw.writeKtPropertySetters(id, setterId)
         } else {
-            if(p.isVar) {
+            if (p.isVar && !isExternalDeclaration(p)) {
                 logger.warnElement(Severity.ErrorSevere, "isVar property without a setter", p)
             }
         }
