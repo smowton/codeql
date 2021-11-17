@@ -91,7 +91,7 @@ class StringLabel<T>(val name: String): Label<T> {
     override fun toString(): String = "#$name"
 }
 
-class StarLabel<T>(): Label<T> {
+class StarLabel<T>: Label<T> {
     override fun toString(): String = "*"
 }
 
@@ -198,7 +198,7 @@ class ExternalClassExtractor(val logger: FileLogger, val sourceFilePath: String,
         val output = OdasaOutput(false, logger)
         output.setCurrentSourceFile(File(sourceFilePath))
         do {
-            val nextBatch = ArrayList<IrClass>(externalClassWorkList)
+            val nextBatch = ArrayList(externalClassWorkList)
             externalClassWorkList.clear()
             nextBatch.forEach { irClass ->
                 output.getTrapLockerForClassFile(irClass).useAC { locker ->
@@ -215,7 +215,7 @@ class ExternalClassExtractor(val logger: FileLogger, val sourceFilePath: String,
                     }
                 }
             }
-        } while (!externalClassWorkList.isEmpty());
+        } while (externalClassWorkList.isNotEmpty())
         output.writeTrapSet()
     }
 
@@ -327,21 +327,37 @@ open class KotlinUsesExtractor(
     data class TypeResult<LabelType>(val id: Label<LabelType>, val signature: String)
     data class TypeResults(val javaResult: TypeResult<out DbType>, val kotlinResult: TypeResult<out DbKt_type>)
 
-    fun useType(t: IrType, canReturnPrimitiveTypes: Boolean = true): TypeResults {
+    fun useType(t: IrType, canReturnPrimitiveTypes: Boolean = true) =
         when(t) {
-            is IrSimpleType -> return useSimpleType(t, canReturnPrimitiveTypes)
+            is IrSimpleType -> useSimpleType(t, canReturnPrimitiveTypes)
             else -> {
                 logger.warn(Severity.ErrorSevere, "Unrecognised IrType: " + t.javaClass)
-                return TypeResults(TypeResult(fakeLabel(), "unknown"), TypeResult(fakeLabel(), "unknown"))
+                TypeResults(TypeResult(fakeLabel(), "unknown"), TypeResult(fakeLabel(), "unknown"))
             }
         }
-    }
 
     fun getJavaEquivalentClass(c: IrClass) =
         c.fqNameWhenAvailable?.toUnsafe()
             ?.let { JavaToKotlinClassMap.mapKotlinToJava(it) }
             ?.let { pluginContext.referenceClass(it.asSingleFqName()) }
             ?.owner
+
+    /**
+     * Gets a KotlinFileExtractor based on this one, except it attributes locations to the file that declares the given class.
+     */
+    fun withSourceFileOfClass(cls: IrClass, populateFileTables: Boolean): KotlinFileExtractor {
+        val clsFile = cls.fileOrNull
+
+        val newTrapWriter =
+            if (isExternalDeclaration(cls) || clsFile == null)
+                tw.withTargetFile(getIrClassBinaryPath(cls), null, populateFileTables)
+            else
+                tw.withTargetFile(clsFile.path, clsFile.fileEntry)
+
+        val newLogger = FileLogger(logger.logCounter, newTrapWriter)
+
+        return KotlinFileExtractor(newLogger, newTrapWriter, dependencyCollector, externalClassExtractor, pluginContext)
+    }
 
     fun useClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): UseClassInstanceResult {
         // TODO: only substitute in class and function signatures
@@ -357,7 +373,7 @@ open class KotlinUsesExtractor(
             // If this is a generic type instantiation then it has no
             // source entity, so we need to extract it here
             if (typeArgs.isNotEmpty()) {
-                extractClassInstance(extractClass, typeArgs)
+                this.withSourceFileOfClass(extractClass, false).extractClassInstance(extractClass, typeArgs)
             }
 
             // Extract both the Kotlin and equivalent Java classes, so that we have database entries
@@ -383,8 +399,7 @@ open class KotlinUsesExtractor(
     }
 
     fun extractExternalEnclosingClassLater(d: IrDeclaration) {
-        val parent = d.parent
-        when (parent) {
+        when (val parent = d.parent) {
             is IrClass -> extractExternalClassLater(parent)
             is IrFunction -> extractExternalEnclosingClassLater(parent)
             is IrFile -> logger.warn(Severity.ErrorSevere, "extractExternalEnclosingClassLater but no enclosing class.")
@@ -397,11 +412,8 @@ open class KotlinUsesExtractor(
         externalClassExtractor.extractLater(c)
     }
 
-    fun addClassLabel(c: IrClass, typeArgs: List<IrTypeArgument>): Label<out DbClassorinterface> {
-        var label = getClassLabel(c, typeArgs)
-        val id: Label<DbClassorinterface> = tw.getLabelFor(label)
-        return id
-    }
+    fun addClassLabel(c: IrClass, typeArgs: List<IrTypeArgument>): Label<out DbClassorinterface> =
+        tw.getLabelFor(getClassLabel(c, typeArgs))
 
     fun shortName(type: IrType, canReturnPrimitiveTypes: Boolean = true): String =
         when(type) {
@@ -459,46 +471,6 @@ open class KotlinUsesExtractor(
 
     fun classShortName(c: IrClass, typeArgs: List<IrTypeArgument>) =
         "${c.name}${typeArgsShortName(typeArgs)}"
-
-    fun extractClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): Label<out DbClassorinterface> {
-        if (typeArgs.isEmpty()) {
-            logger.warn(Severity.ErrorSevere, "Instance without type arguments: " + c.name.asString())
-        }
-
-        val id = addClassLabel(c, typeArgs)
-        val pkg = c.packageFqName?.asString() ?: ""
-        val cls = classShortName(c, typeArgs)
-        val pkgId = extractPackage(pkg)
-        if(c.kind == ClassKind.INTERFACE) {
-            @Suppress("UNCHECKED_CAST")
-            val interfaceId = id as Label<out DbInterface>
-            @Suppress("UNCHECKED_CAST")
-            val sourceInterfaceId = useClassSource(c) as Label<out DbInterface>
-            tw.writeInterfaces(interfaceId, cls, pkgId, sourceInterfaceId)
-        } else {
-            @Suppress("UNCHECKED_CAST")
-            val classId = id as Label<out DbClass>
-            @Suppress("UNCHECKED_CAST")
-            val sourceClassId = useClassSource(c) as Label<out DbClass>
-            tw.writeClasses(classId, cls, pkgId, sourceClassId)
-
-            if (c.kind == ClassKind.ENUM_CLASS) {
-                tw.writeIsEnumType(classId)
-            }
-        }
-
-        for ((idx, arg) in typeArgs.withIndex()) {
-            val argId = getTypeArgumentLabel(arg)
-            tw.writeTypeArgs(argId, idx, id)
-        }
-        tw.writeIsParameterized(id)
-        val unbound = useClassSource(c)
-        tw.writeErasure(id, unbound)
-        extractClassModifiers(c, id)
-        extractClassSupertypes(c, id)
-
-        return id
-    }
 
     fun useSimpleTypeClass(c: IrClass, args: List<IrTypeArgument>, hasQuestionMark: Boolean): TypeResults {
         val classInstanceResult = useClassInstance(c, args)
@@ -742,28 +714,31 @@ class X {
         }
     }
 
-    fun useDeclarationParent(dp: IrDeclarationParent): Label<out DbElement> {
+    fun useDeclarationParent(dp: IrDeclarationParent): Label<out DbElement> =
         when(dp) {
-            is IrFile -> return usePackage(dp.fqName.asString())
-            is IrClass -> return useClassSource(dp)
-            is IrFunction -> return useFunction(dp)
+            is IrFile -> usePackage(dp.fqName.asString())
+            is IrClass -> useClassSource(dp)
+            is IrFunction -> useFunction(dp)
             else -> {
                 logger.warn(Severity.ErrorSevere, "Unrecognised IrDeclarationParent: " + dp.javaClass)
-                return fakeLabel()
+                fakeLabel()
             }
         }
-    }
 
     fun getFunctionLabel(f: IrFunction) : String {
         return getFunctionLabel(f.parent, f.name.asString(), f.valueParameters, f.returnType)
     }
 
-    fun getFunctionLabel(parent: IrDeclarationParent, name: String, parameters: List<IrValueParameter>, returnType: IrType) : String {
-        val paramTypeIds = parameters.joinToString() { "{${useType(erase(it.type)).javaResult.id.toString()}}" }
+    fun getFunctionLabel(
+        parent: IrDeclarationParent,
+        name: String,
+        parameters: List<IrValueParameter>,
+        returnType: IrType
+    ): String {
+        val paramTypeIds = parameters.joinToString { "{${useType(erase(it.type)).javaResult.id}}" }
         val returnTypeId = useType(erase(returnType)).javaResult.id
         val parentId = useDeclarationParent(parent)
-        val label = "@\"callable;{$parentId}.$name($paramTypeIds){$returnTypeId}\""
-        return label
+        return "@\"callable;{$parentId}.$name($paramTypeIds){$returnTypeId}\""
     }
 
     fun <T: DbCallable> useFunction(f: IrFunction): Label<out T> {
@@ -821,12 +796,12 @@ class X {
         val cls = c.name.asString()
         var label: String
         val parent = c.parent
-        if (parent is IrClass) {
+        label = if (parent is IrClass) {
             // todo: fix this. Ugly string concat to handle nested class IDs.
             // todo: Can the containing class have type arguments?
-            label = "${getUnquotedClassLabel(parent, listOf())}\$$cls"
+            "${getUnquotedClassLabel(parent, listOf())}\$$cls"
         } else {
-            label = if (pkg.isEmpty()) cls else "$pkg.$cls"
+            if (pkg.isEmpty()) cls else "$pkg.$cls"
         }
 
         for (arg in typeArgs) {
@@ -881,13 +856,14 @@ class X {
         for(t in c.superTypes) {
             when(t) {
                 is IrSimpleType -> {
-                    when {
-                        t.classifier.owner is IrClass -> {
+                    when (t.classifier.owner) {
+                        is IrClass -> {
                             val classifier: IrClassifierSymbol = t.classifier
                             val tcls: IrClass = classifier.owner as IrClass
                             val l = useClassInstance(tcls, t.arguments).classLabel
                             tw.writeExtendsReftype(id, l)
-                        } else -> {
+                        }
+                        else -> {
                             logger.warn(Severity.ErrorSevere, "Unexpected simple type supertype: " + t.javaClass + ": " + t.render())
                         }
                     }
@@ -898,27 +874,22 @@ class X {
         }
     }
 
-    fun useValueDeclaration(d: IrValueDeclaration): Label<out DbVariable> {
+    fun useValueDeclaration(d: IrValueDeclaration): Label<out DbVariable> =
         when(d) {
-            is IrValueParameter -> {
-                return useValueParameter(d)
-            }
-            is IrVariable -> {
-                return useVariable(d)
-            }
+            is IrValueParameter -> useValueParameter(d)
+            is IrVariable -> useVariable(d)
             else -> {
                 logger.warn(Severity.ErrorSevere, "Unrecognised IrValueDeclaration: " + d.javaClass)
-                return fakeLabel()
+                fakeLabel()
             }
         }
-    }
 
     fun erase (t: IrType): IrType {
         if (t is IrSimpleType) {
             val classifier = t.classifier
             val owner = classifier.owner
             if(owner is IrTypeParameter) {
-                return erase(owner.superTypes.get(0))
+                return erase(owner.superTypes[0])
             }
 
             // todo: fix this:
@@ -935,71 +906,51 @@ class X {
         return t
     }
 
-    fun getValueParameterLabel(vp: IrValueParameter) : String {
+    fun getValueParameterLabel(vp: IrValueParameter): String {
         @Suppress("UNCHECKED_CAST")
         val parentId: Label<out DbMethod> = useDeclarationParent(vp.parent) as Label<out DbMethod>
-        var idx = vp.index
+        val idx = vp.index
         if (idx < 0) {
             // We're not extracting this and this@TYPE parameters of functions:
             logger.warn(Severity.ErrorSevere, "Unexpected negative index for parameter")
         }
-        val label = "@\"params;{$parentId};$idx\""
-        return label
+        return "@\"params;{$parentId};$idx\""
     }
 
-    fun useValueParameter(vp: IrValueParameter): Label<out DbParam> {
-        val label = getValueParameterLabel(vp)
-        val id = tw.getLabelFor<DbParam>(label)
-        return id
-    }
+    fun useValueParameter(vp: IrValueParameter): Label<out DbParam> =
+        tw.getLabelFor(getValueParameterLabel(vp))
 
-    fun getFieldLabel(p: IrField) : String {
+    fun getFieldLabel(p: IrField): String {
         val parentId = useDeclarationParent(p.parent)
-        val label = "@\"field;{$parentId};${p.name.asString()}\""
-        return label
+        return "@\"field;{$parentId};${p.name.asString()}\""
     }
 
-    fun useField(p: IrField): Label<out DbField> {
-        var label = getFieldLabel(p)
-        val id: Label<DbField> = tw.getLabelFor(label)
-        return id
-    }
+    fun useField(p: IrField): Label<out DbField> =
+        tw.getLabelFor(getFieldLabel(p))
 
-    fun getPropertyLabel(p: IrProperty) : String {
+    fun getPropertyLabel(p: IrProperty): String {
         val parentId = useDeclarationParent(p.parent)
-        val label = "@\"property;{$parentId};${p.name.asString()}\""
-        return label
+        return "@\"property;{$parentId};${p.name.asString()}\""
     }
 
-    fun useProperty(p: IrProperty): Label<out DbKt_property> {
-        var label = getPropertyLabel(p)
-        val id: Label<DbKt_property> = tw.getLabelFor(label)
-        return id
-    }
+    fun useProperty(p: IrProperty): Label<out DbKt_property> =
+        tw.getLabelFor(getPropertyLabel(p))
 
-    private fun getEnumEntryLabel(ee: IrEnumEntry) : String {
+    private fun getEnumEntryLabel(ee: IrEnumEntry): String {
         val parentId = useDeclarationParent(ee.parent)
-        val label = "@\"field;{$parentId};${ee.name.asString()}\""
-        return label
+        return "@\"field;{$parentId};${ee.name.asString()}\""
     }
 
-    fun useEnumEntry(ee: IrEnumEntry): Label<out DbField> {
-        var label = getEnumEntryLabel(ee)
-        val id: Label<DbField> = tw.getLabelFor(label)
-        return id
-    }
+    fun useEnumEntry(ee: IrEnumEntry): Label<out DbField> =
+        tw.getLabelFor(getEnumEntryLabel(ee))
 
-    private fun getTypeAliasLabel(ta: IrTypeAlias) : String {
+    private fun getTypeAliasLabel(ta: IrTypeAlias): String {
         val parentId = useDeclarationParent(ta.parent)
-        val label = "@\"type_alias;{$parentId};${ta.name.asString()}\""
-        return label
+        return "@\"type_alias;{$parentId};${ta.name.asString()}\""
     }
 
-    fun useTypeAlias(ta: IrTypeAlias): Label<out DbKt_type_alias> {
-        var label = getTypeAliasLabel(ta)
-        val id: Label<DbKt_type_alias> = tw.getLabelFor(label)
-        return id
-    }
+    fun useTypeAlias(ta: IrTypeAlias): Label<out DbKt_type_alias> =
+        tw.getLabelFor(getTypeAliasLabel(ta))
 
     fun useVariable(v: IrVariable): Label<out DbLocalvar> {
         return tw.getVariableLabelFor<DbLocalvar>(v)
@@ -1075,6 +1026,49 @@ open class KotlinFileExtractor(
         return id
     }
 
+    fun extractClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): Label<out DbClassorinterface> {
+        if (typeArgs.isEmpty()) {
+            logger.warn(Severity.ErrorSevere, "Instance without type arguments: " + c.name.asString())
+        }
+
+        val id = addClassLabel(c, typeArgs)
+        val pkg = c.packageFqName?.asString() ?: ""
+        val cls = classShortName(c, typeArgs)
+        val pkgId = extractPackage(pkg)
+        if(c.kind == ClassKind.INTERFACE) {
+            @Suppress("UNCHECKED_CAST")
+            val interfaceId = id as Label<out DbInterface>
+            @Suppress("UNCHECKED_CAST")
+            val sourceInterfaceId = useClassSource(c) as Label<out DbInterface>
+            tw.writeInterfaces(interfaceId, cls, pkgId, sourceInterfaceId)
+        } else {
+            @Suppress("UNCHECKED_CAST")
+            val classId = id as Label<out DbClass>
+            @Suppress("UNCHECKED_CAST")
+            val sourceClassId = useClassSource(c) as Label<out DbClass>
+            tw.writeClasses(classId, cls, pkgId, sourceClassId)
+
+            if (c.kind == ClassKind.ENUM_CLASS) {
+                tw.writeIsEnumType(classId)
+            }
+        }
+
+        for ((idx, arg) in typeArgs.withIndex()) {
+            val argId = getTypeArgumentLabel(arg)
+            tw.writeTypeArgs(argId, idx, id)
+        }
+        tw.writeIsParameterized(id)
+        val unbound = useClassSource(c)
+        tw.writeErasure(id, unbound)
+        extractClassModifiers(c, id)
+        extractClassSupertypes(c, id)
+
+        val locId = tw.getLocation(c)
+        tw.writeHasLocation(id, locId)
+
+        return id
+    }
+
     fun extractClassSource(c: IrClass): Label<out DbClassorinterface> {
         val id = useClassSource(c)
         val pkg = c.packageFqName?.asString() ?: ""
@@ -1103,7 +1097,7 @@ open class KotlinFileExtractor(
             tw.writeEnclInReftype(id, parentId)
             if(c.isCompanion) {
                 // If we are a companion then our parent has a
-                //     public static final ParentClass$CompanionObjectClass CompanionObJectName;
+                //     public static final ParentClass$CompanionObjectClass CompanionObjectName;
                 // that we need to fabricate here
                 val instance = useCompanionObjectClassInstance(c)
                 if(instance != null) {
@@ -1179,7 +1173,7 @@ open class KotlinFileExtractor(
     fun extractValueParameter(vp: IrValueParameter, parent: Label<out DbCallable>, idx: Int) {
         val id = useValueParameter(vp)
         val type = useType(vp.type)
-        val locId = tw.getLocation(vp.startOffset, vp.endOffset)
+        val locId = tw.getLocation(vp)
         tw.writeParams(id, type.javaResult.id, type.kotlinResult.id, idx, parent, id)
         tw.writeHasLocation(id, locId)
         tw.writeParamName(id, vp.name.asString())
@@ -1191,7 +1185,7 @@ open class KotlinFileExtractor(
         }
 
         // add method:
-        var obinitLabel = getFunctionLabel(c, "<obinit>", listOf(), pluginContext.irBuiltIns.unitType)
+        val obinitLabel = getFunctionLabel(c, "<obinit>", listOf(), pluginContext.irBuiltIns.unitType)
         val obinitId = tw.getLabelFor<DbMethod>(obinitLabel)
         val signature = "TODO"
         val returnType = useType(pluginContext.irBuiltIns.unitType)
@@ -1340,7 +1334,7 @@ open class KotlinFileExtractor(
         val parent = ee.parent
         if(parent !is IrClass) {
             logger.warnElement(Severity.ErrorSevere, "Enum entry with unexpected parent: " + parent.javaClass, ee)
-        } else if (!parent.typeParameters.isEmpty()) {
+        } else if (parent.typeParameters.isNotEmpty()) {
             logger.warnElement(Severity.ErrorSevere, "Enum entry parent class has type parameters: " + parent.name, ee)
         } else {
             val type = useSimpleTypeClass(parent, emptyList(), false)
@@ -1419,8 +1413,8 @@ open class KotlinFileExtractor(
     }
 
     fun extractCall(c: IrCall, callable: Label<out DbCallable>, parent: Label<out DbExprparent>, idx: Int) {
-        val exprId: Label<out DbExpr> = when {
-            c.origin == PLUS -> {
+        val exprId: Label<out DbExpr> = when (c.origin) {
+            PLUS -> {
                 val id = tw.getFreshIdLabel<DbAddexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1428,7 +1422,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == MINUS -> {
+            }
+            MINUS -> {
                 val id = tw.getFreshIdLabel<DbSubexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1436,7 +1431,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == DIV -> {
+            }
+            DIV -> {
                 val id = tw.getFreshIdLabel<DbDivexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1444,7 +1440,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == PERC -> {
+            }
+            PERC -> {
                 val id = tw.getFreshIdLabel<DbRemexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1452,7 +1449,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == EQEQ -> {
+            }
+            EQEQ -> {
                 val id = tw.getFreshIdLabel<DbEqexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1460,7 +1458,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == EXCLEQ -> {
+            }
+            EXCLEQ -> {
                 val id = tw.getFreshIdLabel<DbNeexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1468,7 +1467,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == LT -> {
+            }
+            LT -> {
                 val id = tw.getFreshIdLabel<DbLtexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1476,7 +1476,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == LTEQ -> {
+            }
+            LTEQ -> {
                 val id = tw.getFreshIdLabel<DbLeexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1484,7 +1485,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == GT -> {
+            }
+            GT -> {
                 val id = tw.getFreshIdLabel<DbGtexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1492,7 +1494,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } c.origin == GTEQ -> {
+            }
+            GTEQ -> {
                 val id = tw.getFreshIdLabel<DbGeexpr>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1500,7 +1503,8 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(id, callable)
                 id
-            } else -> {
+            }
+            else -> {
                 val id = tw.getFreshIdLabel<DbMethodaccess>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1764,7 +1768,7 @@ open class KotlinFileExtractor(
                 val id = tw.getFreshIdLabel<DbMethodaccess>()
                 val type = useType(e.type)
                 val locId = tw.getLocation(e)
-                var methodLabel = getFunctionLabel(irCallable.parent, "<obinit>", listOf(), e.type)
+                val methodLabel = getFunctionLabel(irCallable.parent, "<obinit>", listOf(), e.type)
                 val methodId = tw.getLabelFor<DbMethod>(methodLabel)
                 tw.writeExprs_methodaccess(id, type.javaResult.id, type.kotlinResult.id, exprParent.parent, exprParent.idx)
                 tw.writeHasLocation(id, locId)
@@ -1797,8 +1801,7 @@ open class KotlinFileExtractor(
             }
             is IrConst<*> -> {
                 val exprParent = parent.expr(e, callable)
-                val v = e.value
-                when(v) {
+                when(val v = e.value) {
                     is Int, is Short, is Byte -> {
                         val id = tw.getFreshIdLabel<DbIntegerliteral>()
                         val type = useType(e.type)
@@ -1880,8 +1883,7 @@ open class KotlinFileExtractor(
                     tw.writeHasLocation(id, locId)
                     tw.writeCallableEnclosingExpr(id, callable)
 
-                    val ownerParent = owner.parent
-                    when(ownerParent) {
+                    when(val ownerParent = owner.parent) {
                         is IrFunction -> {
                             if (ownerParent.dispatchReceiverParameter == owner &&
                                 ownerParent.extensionReceiverParameter != null) {
@@ -1952,20 +1954,24 @@ open class KotlinFileExtractor(
                 tw.writeHasLocation(id, locId)
                 tw.writeCallableEnclosingExpr(lhsId, callable)
 
-                if (e is IrSetValue) {
-                    val lhsType = useType(e.symbol.owner.type)
-                    tw.writeExprs_varaccess(lhsId, lhsType.javaResult.id, lhsType.kotlinResult.id, id, 0)
-                    val vId = useValueDeclaration(e.symbol.owner)
-                    tw.writeVariableBinding(lhsId, vId)
-                    extractExpressionExpr(e.value, callable, id, 1)
-                } else if (e is IrSetField) {
-                    val lhsType = useType(e.symbol.owner.type)
-                    tw.writeExprs_varaccess(lhsId, lhsType.javaResult.id, lhsType.kotlinResult.id, id, 0)
-                    val vId = useField(e.symbol.owner)
-                    tw.writeVariableBinding(lhsId, vId)
-                    extractExpressionExpr(e.value, callable, id, 1)
-                } else {
-                    logger.warnElement(Severity.ErrorSevere, "Unhandled IrSet* element.", e)
+                when (e) {
+                    is IrSetValue -> {
+                        val lhsType = useType(e.symbol.owner.type)
+                        tw.writeExprs_varaccess(lhsId, lhsType.javaResult.id, lhsType.kotlinResult.id, id, 0)
+                        val vId = useValueDeclaration(e.symbol.owner)
+                        tw.writeVariableBinding(lhsId, vId)
+                        extractExpressionExpr(e.value, callable, id, 1)
+                    }
+                    is IrSetField -> {
+                        val lhsType = useType(e.symbol.owner.type)
+                        tw.writeExprs_varaccess(lhsId, lhsType.javaResult.id, lhsType.kotlinResult.id, id, 0)
+                        val vId = useField(e.symbol.owner)
+                        tw.writeVariableBinding(lhsId, vId)
+                        extractExpressionExpr(e.value, callable, id, 1)
+                    }
+                    else -> {
+                        logger.warnElement(Severity.ErrorSevere, "Unhandled IrSet* element.", e)
+                    }
                 }
             }
             is IrWhen -> {

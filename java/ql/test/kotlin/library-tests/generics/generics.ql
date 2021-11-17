@@ -4,9 +4,9 @@ query predicate genericType(GenericType t, TypeVariable tv, int i) {
   t.getTypeParameter(i) = tv and t.getFile().getExtension() = "kt"
 }
 
-query predicate parameterizedType(ParameterizedType t, GenericType gt, int i, RefType ta) {
+query predicate parameterizedType(ParameterizedType t, GenericType gt, int i, string ta) {
   t.getGenericType() = gt and
-  t.getTypeArgument(i) = ta and
+  t.getTypeArgument(i).toString() = ta and
   t.getFile().getExtension() = "kt"
 }
 
@@ -15,8 +15,10 @@ query predicate genericFunction(GenericCallable c, TypeVariable tv, int i) {
   c.getFile().getExtension() = "kt"
 }
 
-query predicate genericCall(GenericCall c, TypeVariable tv, Type t) { c.getATypeArgument(tv) = t }
+query predicate genericCall(GenericCall c, TypeVariable tv, string t) {
+  c.getATypeArgument(tv).toString() = t
+}
 
-query predicate genericCtor(ClassInstanceExpr c, int i, Type ta) {
-  c.getTypeArgument(i).getType() = ta
+query predicate genericCtor(ClassInstanceExpr c, int i, string ta) {
+  c.getTypeArgument(i).getType().toString() = ta
 }
