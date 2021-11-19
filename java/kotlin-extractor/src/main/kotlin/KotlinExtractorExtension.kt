@@ -324,9 +324,9 @@ open class KotlinUsesExtractor(
         return id
     }
 
-    data class UseClassInstanceResult(val classLabel: Label<out DbClassorinterface>, val javaClass: IrClass, val shortName: String)
-    data class TypeResult<LabelType>(val id: Label<LabelType>, val signature: String, val shortName: String)
-    data class TypeResults(val javaResult: TypeResult<out DbType>, val kotlinResult: TypeResult<out DbKt_type>)
+    data class UseClassInstanceResult(val typeResult: TypeResult<DbClassorinterface>, val javaClass: IrClass)
+    data class TypeResult<out LabelType>(val id: Label<out LabelType>, val signature: String?, val shortName: String)
+    data class TypeResults(val javaResult: TypeResult<DbType>, val kotlinResult: TypeResult<DbKt_type>)
 
     fun useType(t: IrType, canReturnPrimitiveTypes: Boolean = true) =
         when(t) {
@@ -383,7 +383,7 @@ open class KotlinUsesExtractor(
             substituteClass?.let { extractClassLaterIfExternal(it) }
         })
 
-        return UseClassInstanceResult(classLabel, extractClass, classId.shortName)
+        return UseClassInstanceResult(TypeResult(classLabel, extractClass.fqNameWhenAvailable?.asString(), classId.shortName), extractClass)
     }
 
     fun isExternalDeclaration(d: IrDeclaration): Boolean {
@@ -413,22 +413,20 @@ open class KotlinUsesExtractor(
         externalClassExtractor.extractLater(c)
     }
 
-    fun addClassLabel(c: IrClass, typeArgs: List<IrTypeArgument>): TypeResult<out DbClassorinterface> {
+    fun addClassLabel(c: IrClass, typeArgs: List<IrTypeArgument>): TypeResult<DbClassorinterface> {
         val classLabelResult = getClassLabel(c, typeArgs)
         return TypeResult(
             tw.getLabelFor(classLabelResult.classLabel),
-            "TODO",
+            c.fqNameWhenAvailable?.asString(),
             classLabelResult.shortName)
     }
 
     fun useSimpleTypeClass(c: IrClass, args: List<IrTypeArgument>, hasQuestionMark: Boolean): TypeResults {
         val classInstanceResult = useClassInstance(c, args)
-        val javaClassId = classInstanceResult.classLabel
+        val javaClassId = classInstanceResult.typeResult.id
         val kotlinQualClassName = getUnquotedClassLabel(c, args).classLabel
-        val javaQualClassName = classInstanceResult.javaClass.fqNameForIrSerialization.asString()
-        val javaSignature = javaQualClassName // TODO: Is this right?
         // TODO: args ought to be substituted, so e.g. MutableList<MutableList<String>> gets the Java type List<List<String>>
-        val javaResult = TypeResult(javaClassId, javaSignature, classInstanceResult.shortName)
+        val javaResult = classInstanceResult.typeResult
         val kotlinResult = if (hasQuestionMark) {
                 val kotlinSignature = "$kotlinQualClassName?" // TODO: Is this right?
                 val kotlinLabel = "@\"kt_type;nullable;$kotlinQualClassName\""
@@ -548,10 +546,10 @@ open class KotlinUsesExtractor(
                     TypeResult(label, primitiveName, primitiveName)
                 } else {
                     val label = makeClass(javaPackageName, javaClassName)
-                    val signature = "$javaPackageName.$javaClassName" // TODO: Is this right?
+                    val signature = "$javaPackageName.$javaClassName"
                     TypeResult(label, signature, javaClassName)
                 }
-            val kotlinClassId = useClassInstance(kotlinClass, listOf()).classLabel
+            val kotlinClassId = useClassInstance(kotlinClass, listOf()).typeResult.id
             val kotlinResult = if (s.hasQuestionMark) {
                     val kotlinSignature = "$kotlinPackageName.$kotlinClassName?" // TODO: Is this right?
                     val kotlinLabel = "@\"kt_type;nullable;$kotlinPackageName.$kotlinClassName\""
@@ -701,7 +699,7 @@ class X {
 
     fun getTypeArgumentLabel(
         arg: IrTypeArgument
-    ): TypeResult<out DbReftype> {
+    ): TypeResult<DbReftype> {
 
         fun extractBoundedWildcard(wildcardKind: Int, wildcardLabelStr: String, wildcardShortName: String, boundLabel: Label<out DbReftype>): Label<DbWildcard> =
             tw.getLabelFor(wildcardLabelStr) { wildcardLabel ->
@@ -712,11 +710,12 @@ class X {
                 }
             }
 
+        // Note this function doesn't return a signature because type arguments are never incorporated into function signatures.
         return when (arg) {
             is IrStarProjection -> {
                 @Suppress("UNCHECKED_CAST")
                 val anyTypeLabel = useType(pluginContext.irBuiltIns.anyType).javaResult.id as Label<out DbReftype>
-                TypeResult(extractBoundedWildcard(1, "@\"wildcard;\"", "?", anyTypeLabel), "?", "?")
+                TypeResult(extractBoundedWildcard(1, "@\"wildcard;\"", "?", anyTypeLabel), null, "?")
             }
             is IrTypeProjection -> {
                 val boundResults = useType(arg.type, false)
@@ -725,14 +724,14 @@ class X {
 
                 return if(arg.variance == Variance.INVARIANT)
                     @Suppress("UNCHECKED_CAST")
-                    boundResults.javaResult as TypeResult<out DbReftype>
+                    boundResults.javaResult as TypeResult<DbReftype>
                 else {
                     val keyPrefix = if (arg.variance == Variance.IN_VARIANCE) "super" else "extends"
                     val wildcardKind = if (arg.variance == Variance.IN_VARIANCE) 2 else 1
                     val wildcardShortName = "? $keyPrefix ${boundResults.javaResult.shortName}"
                     TypeResult(
                         extractBoundedWildcard(wildcardKind, "@\"wildcard;$keyPrefix{$boundLabel}\"", wildcardShortName, boundLabel),
-                        "TODO",
+                        null,
                         wildcardShortName)
                 }
             }
@@ -800,7 +799,7 @@ class X {
                 // in extractClassSource or extractFunction
                 logger.warn(Severity.ErrorSevere, "Missing type parameter label")
             },
-            param.name.asString(),
+            useType(eraseTypeParameter(param)).javaResult.signature,
             param.name.asString()
         )
 
@@ -829,7 +828,7 @@ class X {
                         is IrClass -> {
                             val classifier: IrClassifierSymbol = t.classifier
                             val tcls: IrClass = classifier.owner as IrClass
-                            val l = useClassInstance(tcls, t.arguments).classLabel
+                            val l = useClassInstance(tcls, t.arguments).typeResult.id
                             tw.writeExtendsReftype(id, l)
                         }
                         else -> {
@@ -858,7 +857,7 @@ class X {
             val classifier = t.classifier
             val owner = classifier.owner
             if(owner is IrTypeParameter) {
-                return erase(owner.superTypes[0])
+                return eraseTypeParameter(owner)
             }
 
             // todo: fix this:
@@ -874,6 +873,9 @@ class X {
         }
         return t
     }
+
+    fun eraseTypeParameter(t: IrTypeParameter) =
+        erase(t.superTypes[0])
 
     fun getValueParameterLabel(vp: IrValueParameter): String {
         @Suppress("UNCHECKED_CAST")
@@ -1063,7 +1065,7 @@ open class KotlinFileExtractor(
 
         val parent = c.parent
         if (parent is IrClass) {
-            val parentId = useClassInstance(parent, listOf()).classLabel
+            val parentId = useClassInstance(parent, listOf()).typeResult.id
             tw.writeEnclInReftype(id, parentId)
             if(c.isCompanion) {
                 // If we are a companion then our parent has a
@@ -1117,7 +1119,7 @@ open class KotlinFileExtractor(
             logger.warn(Severity.ErrorSevere, "Using companion instance for non-companion class")
             return null
         } else {
-            val parentId = useClassInstance(parent, listOf()).classLabel
+            val parentId = useClassInstance(parent, listOf()).typeResult.id
             val instanceName = c.name.asString()
             val instanceLabel = "@\"field;{$parentId};$instanceName\""
             val instanceId: Label<DbField> = tw.getLabelFor(instanceLabel)
@@ -1129,20 +1131,21 @@ open class KotlinFileExtractor(
         if(!c.isNonCompanionObject) {
             logger.warn(Severity.ErrorSevere, "Using instance for non-object class")
         }
-        val classId = useClassInstance(c, listOf()).classLabel
+        val classId = useClassInstance(c, listOf()).typeResult.id
         val instanceName = "INSTANCE"
         val instanceLabel = "@\"field;{$classId};$instanceName\""
         val instanceId: Label<DbField> = tw.getLabelFor(instanceLabel)
         return FieldResult(instanceId, instanceName)
     }
 
-    fun extractValueParameter(vp: IrValueParameter, parent: Label<out DbCallable>, idx: Int) {
+    fun extractValueParameter(vp: IrValueParameter, parent: Label<out DbCallable>, idx: Int): TypeResults {
         val id = useValueParameter(vp)
         val type = useType(vp.type)
         val locId = tw.getLocation(vp)
         tw.writeParams(id, type.javaResult.id, type.kotlinResult.id, idx, parent, id)
         tw.writeHasLocation(id, locId)
         tw.writeParamName(id, vp.name.asString())
+        return type
     }
 
     private fun extractObjectInitializerFunction(c: IrClass, parentId: Label<out DbReftype>) {
@@ -1153,9 +1156,8 @@ open class KotlinFileExtractor(
         // add method:
         val obinitLabel = getFunctionLabel(c, "<obinit>", listOf(), pluginContext.irBuiltIns.unitType)
         val obinitId = tw.getLabelFor<DbMethod>(obinitLabel)
-        val signature = "TODO"
         val returnType = useType(pluginContext.irBuiltIns.unitType)
-        tw.writeMethods(obinitId, "<obinit>", signature, returnType.javaResult.id, returnType.kotlinResult.id, parentId, obinitId)
+        tw.writeMethods(obinitId, "<obinit>", "<obinit>()", returnType.javaResult.id, returnType.kotlinResult.id, parentId, obinitId)
 
         val locId = tw.getLocation(c)
         tw.writeHasLocation(obinitId, locId)
@@ -1217,17 +1219,23 @@ open class KotlinFileExtractor(
         f.typeParameters.map { extractTypeParameter(it) }
 
         val locId = tw.getLocation(f)
-        val signature = "TODO"
 
-        val id: Label<out DbCallable>
+        val id = useFunction<DbCallable>(f)
+        val paramTypes = f.valueParameters.mapIndexed { i, vp ->
+            extractValueParameter(vp, id, i)
+        }
+        val paramsSignature = paramTypes.joinToString(separator = ",", prefix = "(", postfix = ")") { it.javaResult.signature!! }
+
         if (f.symbol is IrConstructorSymbol) {
             val returnType = useType(erase(f.returnType))
-            id = useFunction<DbConstructor>(f)
-            tw.writeConstrs(id, f.returnType.classFqName?.shortName()?.asString() ?: f.name.asString(), signature, returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
+            val shortName = f.returnType.classFqName?.shortName()?.asString() ?: f.name.asString()
+            @Suppress("UNCHECKED_CAST")
+            tw.writeConstrs(id as Label<DbConstructor>, shortName, "$shortName$paramsSignature", returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
         } else {
             val returnType = useType(f.returnType)
-            id = useFunction<DbMethod>(f)
-            tw.writeMethods(id, f.name.asString(), signature, returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
+            val shortName = f.name.asString()
+            @Suppress("UNCHECKED_CAST")
+            tw.writeMethods(id as Label<DbMethod>, shortName, "$shortName$paramsSignature", returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
 
             val extReceiver = f.extensionReceiverParameter
             if (extReceiver != null) {
@@ -1240,9 +1248,6 @@ open class KotlinFileExtractor(
         val body = f.body
         if(body != null) {
             extractBody(body, id)
-        }
-        f.valueParameters.forEachIndexed { i, vp ->
-            extractValueParameter(vp, id, i)
         }
 
         currentFunction = null
