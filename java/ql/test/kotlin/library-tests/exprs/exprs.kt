@@ -1,7 +1,13 @@
 import java.awt.Polygon
 import java.awt.Rectangle
 
-fun topLevelMethod(x: Int, y: Int, dx: Double, dy: Double): Int {
+fun topLevelMethod(x: Int, y: Int,
+                   byx: Byte, byy: Byte,
+                   sx: Short, sy: Short,
+                   lx: Long, ly: Long,
+                   dx: Double, dy: Double,
+                   fx: Float, fy: Float,
+                   ): Int {
     val i1 = 1
     val i2 = x + y
     val i3 = x - y
@@ -28,8 +34,82 @@ TODO
     val i21 = x !in x .. y
 */
 
-    val d1 = dx == dy
-    val d2 = dx != dy
+    val by1 = 1.0
+    val by2 = byx + byy
+    val by3 = byx - byy
+    val by4 = byx / byy
+    val by5 = byx % byy
+    val by6 = byx == byy
+    val by7 = byx != byy
+    val by8 = byx < byy
+    val by9 = byx <= byy
+    val by10 = byx > byy
+    val by11 = byx >= byy
+    val by12 = byx === byy
+    val by13 = byx !== byy
+
+    val s1 = 1.0
+    val s2 = sx + sy
+    val s3 = sx - sy
+    val s4 = sx / sy
+    val s5 = sx % sy
+    val s6 = sx == sy
+    val s7 = sx != sy
+    val s8 = sx < sy
+    val s9 = sx <= sy
+    val s10 = sx > sy
+    val s11 = sx >= sy
+    val s12 = sx === sy
+    val s13 = sx !== sy
+
+    val l1 = 1.0
+    val l2 = lx + ly
+    val l3 = lx - ly
+    val l4 = lx / ly
+    val l5 = lx % ly
+    val l6 = lx shl y
+    val l7 = lx shr y
+    val l8 = lx ushr y
+    val l9 = lx and ly
+    val l10 = lx or ly
+    val l11 = lx xor ly
+    val l12 = lx.inv()
+    val l13 = lx == ly
+    val l14 = lx != ly
+    val l15 = lx < ly
+    val l16 = lx <= ly
+    val l17 = lx > ly
+    val l18 = lx >= ly
+    val l19 = lx === ly
+    val l20 = lx !== ly
+
+    val d1 = 1.0
+    val d2 = dx + dy
+    val d3 = dx - dy
+    val d4 = dx / dy
+    val d5 = dx % dy
+    val d6 = dx == dy
+    val d7 = dx != dy
+    val d8 = dx < dy
+    val d9 = dx <= dy
+    val d10 = dx > dy
+    val d11 = dx >= dy
+    val d12 = dx === dy
+    val d13 = dx !== dy
+
+    val f1 = 1.0
+    val f2 = fx + fy
+    val f3 = fx - fy
+    val f4 = fx / fy
+    val f5 = fx % fy
+    val f6 = fx == fy
+    val f7 = fx != fy
+    val f8 = fx < fy
+    val f9 = fx <= fy
+    val f10 = fx > fy
+    val f11 = fx >= fy
+    val f12 = fx === fy
+    val f13 = fx !== fy
 
     val b1 = true
     val b2 = false
