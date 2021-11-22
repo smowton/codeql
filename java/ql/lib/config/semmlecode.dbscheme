@@ -584,6 +584,7 @@ case @stmt.kind of
 | 21 = @case
 | 22 = @catchclause
 | 23 = @yieldstmt
+| 24 = @anonymousclassdeclstmt
 ;
 
 #keyset[parent,idx]
@@ -1126,4 +1127,9 @@ ktPropertySetters(
 ktPropertyBackingFields(
   unique int id: @kt_property ref,
   int backingField: @field ref
+)
+
+ktAnonymousClassDeclarationStmts(
+  unique int id: @anonymousclassdeclstmt ref,
+  int classId: @class ref
 )
