@@ -693,6 +693,7 @@ case @expr.kind of
 | 78  = @stmtexpr
 | 79  = @stringtemplateexpr
 | 80  = @varargexpr
+| 81  = @notnullexpr
 ;
 
 /** Holds if this `when` expression was written as an `if` expression. */
@@ -769,7 +770,8 @@ when_branch_else(unique int id: @whenbranch ref);
              | @minusexpr
              | @plusexpr
              | @bitnotexpr
-             | @lognotexpr;
+             | @lognotexpr
+             | @notnullexpr;
 
 @caller =  @classinstancexpr
          | @methodaccess
