@@ -11,8 +11,7 @@ class ClassLocation extends Class {
   }
 }
 
-from Class c, Type superType
-where c.getSourceDeclaration().fromSource() and
-      superType = c.getASupertype()
-select c, superType
+from ParameterizedClass c, int i
+where c.getSourceDeclaration().fromSource()
+select c, i, c.getTypeArgument(i)
 
