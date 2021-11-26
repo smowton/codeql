@@ -687,9 +687,17 @@ open class KotlinFileExtractor(
             }
 
             val dr = c.dispatchReceiver
-            if(dr != null) {
+            val er = c.extensionReceiver
+            if (dr != null) {
                 extractExpressionExpr(dr, callable, id, -1, enclosingStmt)
+
+                if (er != null && er != dr) {
+                    logger.warnElement(Severity.ErrorSevere, "Expected to only find extension receiver or dispatch receiver. Found both. Extracting dispatch receiver only", c)
+                }
+            } else if (er != null) {
+                extractExpressionExpr(er, callable, id, -1, enclosingStmt)
             }
+
             for(i in 0 until c.valueArgumentsCount) {
                 val arg = c.getValueArgument(i)
                 if(arg != null) {
@@ -744,9 +752,7 @@ open class KotlinFileExtractor(
         when {
             c.origin == IrStatementOrigin.PLUS &&
             (isNumericFunction("plus")
-                    || isFunction("kotlin", "String", "plus")
-                    || isFunction("kotlin", "String", "plus", true) // TODO: this is not correct. `a + b` becomes `(a?:"\"null\"") + (b?:"\"null\"")`.
-                    ) -> {
+                    || isFunction("kotlin", "String", "plus")) -> {
                 val id = tw.getFreshIdLabel<DbAddexpr>()
                 val type = useType(c.type)
                 tw.writeExprs_addexpr(id, type.javaResult.id, type.kotlinResult.id, parent, idx)
