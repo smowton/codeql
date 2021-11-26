@@ -459,6 +459,12 @@ private module ControlFlowGraphImpl {
       this instanceof LocalVariableDeclExpr and
       not this = any(InstanceOfExpr ioe).getLocalVariableDeclExpr()
       or
+      this instanceof StringTemplateExpr
+      or
+      this instanceof VarArgExpr
+      or
+      this instanceof ClassExpr
+      or
       this instanceof RValue
       or
       this instanceof Call // includes both expressions and statements
@@ -548,6 +554,16 @@ private module ControlFlowGraphImpl {
         result = e.getArgument(index)
       )
       or
+      exists(StringTemplateExpr e | e = this |
+        result = e.getComponent(index)
+      )
+      or
+      exists(VarArgExpr e | e = this |
+        result = e.getComponent(index)
+      )
+      or
+      index = 0 and result = this.(ClassExpr).getExpr()
+      or
       index = 0 and result = this.(ReturnStmt).getResult()
       or
       index = 0 and result = this.(ThrowStmt).getExpr()
@@ -602,6 +618,8 @@ private module ControlFlowGraphImpl {
     result = n and n instanceof WhenExpr
     or
     result = n and n instanceof WhenBranch
+    or
+    result = n and n instanceof StmtExpr
     or
     result = n and n.(PostOrderNode).isLeafNode()
     or
@@ -960,6 +978,10 @@ private module ControlFlowGraphImpl {
         completion = YieldCompletion(branchCompletion)
       )
     )
+    or
+    n instanceof KtAnonymousClassDeclarationStmt and
+    last = n and
+    completion = NormalCompletion()
   }
 
   /**
