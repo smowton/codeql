@@ -28,11 +28,8 @@ fun topLevelMethod(x: Int, y: Int,
     val i18 = x >= y
     val i19 = x === y
     val i20 = x !== y
-/*
-TODO
-    val i20 = x in x .. y
-    val i21 = x !in x .. y
-*/
+    val i21 = x in x .. y
+    val i22 = x !in x .. y
 
     val by1 = 1.0
     val by2 = byx + byy
@@ -127,7 +124,7 @@ TODO
     val str2: String? = "string lit"
     val str3: String? = null
     val str4: String = "foo $str1 bar $str2 baz"
-    // TODO val str5: String = "foo ${str1 + str2} bar ${str2 + str1} baz"
+    val str5: String = "foo ${str1 + str2} bar ${str2 + str1} baz"
     val str6 = str1 + str2
 
     var variable = 10
@@ -212,4 +209,8 @@ class Class2 {
         val d0 = enumValueOf<Color>("GREEN")
         val d1 = Color.valueOf("GREEN")
     }
+}
+
+fun todo() {
+    // TODO: TODO()
 }
