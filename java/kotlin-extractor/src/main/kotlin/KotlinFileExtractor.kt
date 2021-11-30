@@ -354,12 +354,12 @@ open class KotlinFileExtractor(
         val paramsSignature = paramTypes.joinToString(separator = ",", prefix = "(", postfix = ")") { it.javaResult.signature!! }
 
         if (f.symbol is IrConstructorSymbol) {
-            val returnType = useType(erase(f.returnType))
+            val returnType = useType(erase(f.returnType), TypeContext.RETURN)
             val shortName = if (f.returnType.isAnonymous) "" else f.returnType.classFqName?.shortName()?.asString() ?: f.name.asString()
             @Suppress("UNCHECKED_CAST")
             tw.writeConstrs(id as Label<DbConstructor>, shortName, "$shortName$paramsSignature", returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
         } else {
-            val returnType = useType(f.returnType)
+            val returnType = useType(f.returnType, TypeContext.RETURN)
             val shortName = f.name.asString()
             @Suppress("UNCHECKED_CAST")
             tw.writeMethods(id as Label<DbMethod>, shortName, "$shortName$paramsSignature", returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
@@ -1018,7 +1018,7 @@ open class KotlinFileExtractor(
     ) {
         for (argIdx in 0 until c.typeArgumentsCount) {
             val arg = c.getTypeArgument(argIdx)!!
-            val argType = useType(arg, false)
+            val argType = useType(arg, TypeContext.GENERIC_ARGUMENT)
             val argId = tw.getFreshIdLabel<DbUnannotatedtypeaccess>()
             val mul = if (reverse) -1 else 1
             tw.writeExprs_unannotatedtypeaccess(argId, argType.javaResult.id, argType.kotlinResult.id, id, argIdx * mul + startIndex)

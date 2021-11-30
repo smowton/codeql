@@ -48,9 +48,9 @@ open class KotlinUsesExtractor(
     data class TypeResult<out LabelType>(val id: Label<out LabelType>, val signature: String?, val shortName: String)
     data class TypeResults(val javaResult: TypeResult<DbType>, val kotlinResult: TypeResult<DbKt_type>)
 
-    fun useType(t: IrType, canReturnPrimitiveTypes: Boolean = true) =
+    fun useType(t: IrType, context: TypeContext = TypeContext.OTHER) =
         when(t) {
-            is IrSimpleType -> useSimpleType(t, canReturnPrimitiveTypes)
+            is IrSimpleType -> useSimpleType(t, context)
             else -> {
                 logger.warn(Severity.ErrorSevere, "Unrecognised IrType: " + t.javaClass)
                 TypeResults(TypeResult(fakeLabel(), "unknown", "unknown"), TypeResult(fakeLabel(), "unknown", "unknown"))
@@ -101,11 +101,13 @@ open class KotlinUsesExtractor(
                 this.withSourceFileOfClass(extractClass).extractClassInstance(extractClass, typeArgs)
             }
 
-            // Extract both the Kotlin and equivalent Java classes, so that we have database entries
-            // for both even if all internal references to the Kotlin type are substituted.
-            extractClassLaterIfExternal(c)
             substituteClass?.let { extractClassLaterIfExternal(it) }
         })
+        // Extract both the Kotlin and equivalent Java classes, so that we have database entries
+        // for both even if all internal references to the Kotlin type are substituted.
+        // TODO: Should we do this inside the label initialisation? That would require all
+        //       initialisers of the label to do it.
+        extractClassLaterIfExternal(c)
 
         return UseClassInstanceResult(TypeResult(classLabel, extractClass.fqNameWhenAvailable?.asString(), classId.shortName), extractClass)
     }
@@ -260,7 +262,11 @@ open class KotlinUsesExtractor(
         return TypeResults(javaResult, arrayClassResult.kotlinResult)
     }
 
-    fun useSimpleType(s: IrSimpleType, canReturnPrimitiveTypes: Boolean): TypeResults {
+    enum class TypeContext {
+        RETURN, GENERIC_ARGUMENT, OTHER
+    }
+
+    fun useSimpleType(s: IrSimpleType, context: TypeContext): TypeResults {
         if (s.abbreviation != null) {
             // TODO: Extract this information
             logger.warn(Severity.ErrorSevere, "Type alias ignored for " + s.render())
@@ -276,9 +282,10 @@ open class KotlinUsesExtractor(
             return classId
         }
         fun primitiveType(kotlinClass: IrClass, primitiveName: String?,
+                          otherIsPrimitive: Boolean,
                           javaPackageName: String, javaClassName: String,
                           kotlinPackageName: String, kotlinClassName: String): TypeResults {
-            val javaResult = if (canReturnPrimitiveTypes && !s.hasQuestionMark && primitiveName != null) {
+            val javaResult = if ((context == TypeContext.RETURN || (context == TypeContext.OTHER && otherIsPrimitive)) && !s.hasQuestionMark && primitiveName != null) {
                     val label: Label<DbPrimitive> = tw.getLabelFor("@\"type;$primitiveName\"", {
                         tw.writePrimitives(it, primitiveName)
                     })
@@ -323,8 +330,9 @@ XXX delete?
 */
             primitiveInfo != null -> return primitiveType(
                 s.classifier.owner as IrClass,
-                primitiveInfo.primitiveName, primitiveInfo.javaPackageName,
-                primitiveInfo.javaClassName, primitiveInfo.kotlinPackageName, primitiveInfo.kotlinClassName
+                primitiveInfo.primitiveName, primitiveInfo.otherIsPrimitive,
+                primitiveInfo.javaPackageName, primitiveInfo.javaClassName,
+                primitiveInfo.kotlinPackageName, primitiveInfo.kotlinClassName
             )
 /*
 TODO: Test case: nullable and has-question-mark type variables:
@@ -457,7 +465,7 @@ class X {
                 TypeResult(extractBoundedWildcard(1, "@\"wildcard;\"", "?", anyTypeLabel), null, "?")
             }
             is IrTypeProjection -> {
-                val boundResults = useType(arg.type, false)
+                val boundResults = useType(arg.type, TypeContext.GENERIC_ARGUMENT)
                 @Suppress("UNCHECKED_CAST")
                 val boundLabel = boundResults.javaResult.id as Label<out DbReftype>
 
@@ -640,13 +648,13 @@ class X {
     fun useValueParameter(vp: IrValueParameter): Label<out DbParam> =
         tw.getLabelFor(getValueParameterLabel(vp))
 
-    fun getFieldLabel(p: IrField): String {
-        val parentId = useDeclarationParent(p.parent)
-        return "@\"field;{$parentId};${p.name.asString()}\""
+    fun getFieldLabel(f: IrField): String {
+        val parentId = useDeclarationParent(f.parent)
+        return "@\"field;{$parentId};${f.name.asString()}\""
     }
 
-    fun useField(p: IrField): Label<out DbField> =
-        tw.getLabelFor(getFieldLabel(p))
+    fun useField(f: IrField): Label<out DbField> =
+        tw.getLabelFor(getFieldLabel(f))
 
     fun getPropertyLabel(p: IrProperty): String {
         val parentId = useDeclarationParent(p.parent)
