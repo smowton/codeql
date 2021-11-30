@@ -348,8 +348,12 @@ open class KotlinFileExtractor(
         val locId = tw.getLocation(f)
 
         val id = useFunction<DbCallable>(f)
+
+        val extReceiver = f.extensionReceiverParameter
+        val isExtension = extReceiver != null
+        val idxOffset = if (isExtension) 1 else 0
         val paramTypes = f.valueParameters.mapIndexed { i, vp ->
-            extractValueParameter(vp, id, i)
+            extractValueParameter(vp, id, i + idxOffset)
         }
         val paramsSignature = paramTypes.joinToString(separator = ",", prefix = "(", postfix = ")") { it.javaResult.signature!! }
 
@@ -363,11 +367,11 @@ open class KotlinFileExtractor(
             val shortName = f.name.asString()
             @Suppress("UNCHECKED_CAST")
             tw.writeMethods(id as Label<DbMethod>, shortName, "$shortName$paramsSignature", returnType.javaResult.id, returnType.kotlinResult.id, parentId, id)
-
-            val extReceiver = f.extensionReceiverParameter
+            
             if (extReceiver != null) {
                 val extendedType = useType(extReceiver.type)
                 tw.writeKtExtensionFunctions(id, extendedType.javaResult.id, extendedType.kotlinResult.id)
+                extractValueParameter(extReceiver, id, 0)
             }
         }
 
@@ -683,23 +687,28 @@ open class KotlinFileExtractor(
             tw.writeStatementEnclosingExpr(id, enclosingStmt)
 
             if (extractTypeArguments) {
-                // type arguments at index -3, -4, ...
-                extractTypeArguments(c, id, callable, enclosingStmt, -3, true)
+                // type arguments at index -2, -3, ...
+                extractTypeArguments(c, id, callable, enclosingStmt, -2, true)
             }
 
             val dr = c.dispatchReceiver
-            val er = c.extensionReceiver
             if (dr != null) {
                 extractExpressionExpr(dr, callable, id, -1, enclosingStmt)
             }
+
+            val er = c.extensionReceiver
+            val idxOffset: Int
             if (er != null) {
-                extractExpressionExpr(er, callable, id, -2, enclosingStmt)
+                extractExpressionExpr(er, callable, id, 0, enclosingStmt)
+                idxOffset = 1
+            } else {
+                idxOffset = 0
             }
 
             for(i in 0 until c.valueArgumentsCount) {
                 val arg = c.getValueArgument(i)
                 if(arg != null) {
-                    extractExpressionExpr(arg, callable, id, i, enclosingStmt)
+                    extractExpressionExpr(arg, callable, id, i + idxOffset, enclosingStmt)
                 }
             }
         }
@@ -964,7 +973,7 @@ open class KotlinFileExtractor(
 
                 if (isBuiltinCallKotlin(c, "arrayOf")) {
                     if (c.typeArgumentsCount == 1) {
-                        extractTypeArguments(c, id, callable, enclosingStmt, -1)
+                        extractTypeArguments(c, id, callable, enclosingStmt,-1)
                     } else {
                         logger.warnElement( Severity.ErrorSevere, "Expected to find one type argument in arrayOf call", c )
                     }
