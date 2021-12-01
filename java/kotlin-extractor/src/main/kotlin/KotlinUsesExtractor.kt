@@ -1,5 +1,6 @@
 package com.github.codeql
 
+import com.github.codeql.utils.substituteTypeArguments
 import com.semmle.extractor.java.OdasaOutput
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
@@ -235,7 +236,7 @@ open class KotlinUsesExtractor(
                 dimensions,
                 componentTypeResults.javaResult.id)
 
-            extractClassSupertypes(arrayType.classifier.owner as IrClass, it)
+            extractClassSupertypes(arrayType.classifier.owner as IrClass, it, arrayType.arguments)
 
             // array.length
             val length = tw.getLabelFor<DbField>("@\"field;{$it};length\"")
@@ -577,8 +578,24 @@ class X {
         }
     }
 
-    fun extractClassSupertypes(c: IrClass, id: Label<out DbReftype>) {
-        for(t in c.superTypes) {
+    /**
+     * Extracts the supertypes of class `c` with arguments `typeArgsQ`, or if `typeArgsQ` is null, the non-paramterised
+     * version of `c`. `id` is the label of this class or class instantiation.
+     *
+     * For example, for type `List` if `typeArgsQ` is non-null list `[String]` then we will extract the supertypes
+     * of `List<String>`, i.e. `Appendable<String>` etc, or if `typeArgsQ` is null we will extract `Appendable<E>`
+     * where `E` is the type variable declared as `List<E>`.
+     */
+    fun extractClassSupertypes(c: IrClass, id: Label<out DbReftype>, typeArgsQ: List<IrTypeArgument>? = null) {
+        // Note we only need to substitute type args here because it is illegal to directly extend a type variable.
+        // (For example, we can't have `class A<E> : E`, but can have `class A<E> : Comparable<E>`)
+        val subbedSupertypes = typeArgsQ?.let { typeArgs ->
+            c.superTypes.map {
+                it.substituteTypeArguments(c.typeParameters, typeArgs)
+            }
+        } ?: c.superTypes
+
+        for(t in subbedSupertypes) {
             when(t) {
                 is IrSimpleType -> {
                     when (t.classifier.owner) {
