@@ -9,7 +9,7 @@ import java.util.ArrayList
 import java.util.HashSet
 import java.util.zip.GZIPOutputStream
 
-class ExternalClassExtractor(val logger: FileLogger, val sourceFilePath: String, val primitiveTypeMapping: Map<IdSignature.PublicSignature, PrimitiveTypeInfo>, val pluginContext: IrPluginContext) {
+class ExternalClassExtractor(val logger: FileLogger, val sourceFilePath: String, val primitiveTypeMapping: PrimitiveTypeMapping, val pluginContext: IrPluginContext) {
 
     val externalClassesDone = HashSet<IrClass>()
     val externalClassWorkList = ArrayList<IrClass>()
@@ -33,8 +33,9 @@ class ExternalClassExtractor(val logger: FileLogger, val sourceFilePath: String,
                             logger.info("Skipping extracting class ${irClass.name}")
                         } else {
                             GZIPOutputStream(manager.getFile().outputStream()).bufferedWriter().use { trapFileBW ->
+                                val binaryPath = getIrClassBinaryPath(irClass)
                                 val tw =
-                                    FileTrapWriter(TrapLabelManager(), trapFileBW, getIrClassBinaryPath(irClass), true)
+                                    FileTrapWriter(TrapLabelManager(), trapFileBW, binaryPath, true)
                                 val fileExtractor = KotlinFileExtractor(logger, tw, manager, this, primitiveTypeMapping, pluginContext)
                                 fileExtractor.extractClassSource(irClass)
                             }
