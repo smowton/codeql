@@ -32,7 +32,7 @@ class KotlinSourceFileExtractor(
         tw.writeHasLocation(id, locId)
         tw.writeCupackage(id, pkgId)
         // TODO: Use of fileClass looks like it will defeat laziness since 3502e5c5720e981c913bdafdccf7f5e9237be070
-        // TODO: Consistency query for unused file classes
+        // TODO: Fix, then reenable consistency-queries/file_classes.ql
         file.declarations.map { extractDeclaration(it, fileClass) }
         CommentExtractor(this).extract()
     }
@@ -66,6 +66,7 @@ class KotlinSourceFileExtractor(
       val locId = tw.getWholeFileLocation()
       val pkgId = extractPackage(pkg)
       tw.writeClasses(id, jvmName, pkgId, id)
+      tw.writeFile_class(id)
       tw.writeHasLocation(id, locId)
       return id
   }
