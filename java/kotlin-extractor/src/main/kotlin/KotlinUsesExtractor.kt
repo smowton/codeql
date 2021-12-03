@@ -4,6 +4,7 @@ import com.github.codeql.utils.substituteTypeArguments
 import com.semmle.extractor.java.OdasaOutput
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
@@ -68,19 +69,22 @@ open class KotlinUsesExtractor(
     /**
      * Gets a KotlinFileExtractor based on this one, except it attributes locations to the file that declares the given class.
      */
-    fun withSourceFileOfClass(cls: IrClass): KotlinFileExtractor {
+    private fun withSourceFileOfClass(cls: IrClass): KotlinFileExtractor {
         val clsFile = cls.fileOrNull
 
-        val newTrapWriter =
-            if (isExternalDeclaration(cls) || clsFile == null)
-                tw.makeFileTrapWriter(getIrClassBinaryPath(cls))
-            else
-                tw.makeSourceFileTrapWriter(clsFile, false)
+        if (isExternalDeclaration(cls) || clsFile == null) {
+            val newTrapWriter = tw.makeFileTrapWriter(getIrClassBinaryPath(cls))
+            val newLogger = FileLogger(logger.logCounter, newTrapWriter)
+            return KotlinFileExtractor(newLogger, newTrapWriter, dependencyCollector, externalClassExtractor, primitiveTypeMapping, pluginContext)
+        }
 
+        if (this is KotlinSourceFileExtractor && this.file == clsFile) {
+            return this
+        }
+
+        val newTrapWriter = tw.makeSourceFileTrapWriter(clsFile, false)
         val newLogger = FileLogger(logger.logCounter, newTrapWriter)
-
-        // TODO: Conditionally KotlinSourceFileExtractor?
-        return KotlinFileExtractor(newLogger, newTrapWriter, dependencyCollector, externalClassExtractor, primitiveTypeMapping, pluginContext)
+        return KotlinSourceFileExtractor(newLogger, newTrapWriter, clsFile, externalClassExtractor, primitiveTypeMapping, pluginContext)
     }
 
     fun useClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): UseClassInstanceResult {
@@ -150,8 +154,19 @@ open class KotlinUsesExtractor(
             classLabelResult.shortName)
     }
 
-    open fun useAnonymousClass(c: IrClass): TypeResults {
-        throw Exception("Anonymous classes can only be accessed through source file extraction")
+    private val anonymousTypeMapping: MutableMap<IrClass, TypeResults> = mutableMapOf()
+
+    fun useAnonymousClass(c: IrClass): TypeResults {
+        var res = anonymousTypeMapping[c]
+        if (res == null) {
+            val javaResult = TypeResult(tw.getFreshIdLabel<DbClass>(), "", "")
+            val kotlinResult = TypeResult(tw.getFreshIdLabel<DbKt_notnull_type>(), "", "")
+            tw.writeKt_notnull_types(kotlinResult.id, javaResult.id)
+            res = TypeResults(javaResult, kotlinResult)
+            anonymousTypeMapping[c] = res
+        }
+
+        return res
     }
 
     fun useSimpleTypeClass(c: IrClass, args: List<IrTypeArgument>, hasQuestionMark: Boolean): TypeResults {
@@ -421,22 +436,65 @@ class X {
         }
 
     fun getFunctionLabel(f: IrFunction) : String {
-        return getFunctionLabel(f.parent, f.name.asString(), f.valueParameters, f.returnType)
+        return getFunctionLabel(f.parent, f.name.asString(), f.valueParameters, f.returnType, f.extensionReceiverParameter)
     }
 
     fun getFunctionLabel(
         parent: IrDeclarationParent,
         name: String,
         parameters: List<IrValueParameter>,
-        returnType: IrType
+        returnType: IrType,
+        extensionReceiverParameter: IrValueParameter?
     ): String {
-        val paramTypeIds = parameters.joinToString { "{${useType(erase(it.type)).javaResult.id}}" }
+        val allParams = if (extensionReceiverParameter == null) {
+                            parameters
+                        } else {
+                            val params = mutableListOf(extensionReceiverParameter)
+                            params.addAll(parameters)
+                            params
+                        }
+        val paramTypeIds = allParams.joinToString { "{${useType(erase(it.type)).javaResult.id}}" }
         val returnTypeId = useType(erase(returnType)).javaResult.id
         val parentId = useDeclarationParent(parent)
         return "@\"callable;{$parentId}.$name($paramTypeIds){$returnTypeId}\""
     }
 
+    protected fun IrFunction.isLocalFunction(): Boolean {
+        return this.visibility == DescriptorVisibilities.LOCAL &&
+                this.origin != IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA
+    }
+
+    private val generatedLocalFunctionTypeMapping: MutableMap<IrFunction, LocalFunctionLabels> = mutableMapOf()
+
+    data class LocalFunctionLabels(val type: TypeResults, val constructor: Label<DbConstructor>, val function: Label<DbMethod>)
+
+    fun getLocalFunctionLabels(f: IrFunction): LocalFunctionLabels {
+        if (!f.isLocalFunction()){
+            logger.warn(Severity.ErrorSevere, "Extracting a non-local function as a local one")
+        }
+
+        var res = generatedLocalFunctionTypeMapping[f]
+        if (res == null) {
+            val javaResult = TypeResult(tw.getFreshIdLabel<DbClass>(), "", "")
+            val kotlinResult = TypeResult(tw.getFreshIdLabel<DbKt_notnull_type>(), "", "")
+            tw.writeKt_notnull_types(kotlinResult.id, javaResult.id)
+            res = LocalFunctionLabels(
+                TypeResults(javaResult, kotlinResult),
+                tw.getFreshIdLabel(),
+                tw.getFreshIdLabel())
+            generatedLocalFunctionTypeMapping[f] = res
+        }
+
+        return res
+    }
+
     fun <T: DbCallable> useFunction(f: IrFunction): Label<out T> {
+        if (f.isLocalFunction()) {
+            val ids = getLocalFunctionLabels(f)
+            @Suppress("UNCHECKED_CAST")
+            return ids.function as Label<out T>
+        }
+
         val label = getFunctionLabel(f)
         val id: Label<T> = tw.getLabelFor(label)
         if(isExternalDeclaration(f)) {
@@ -586,13 +644,17 @@ class X {
      * where `E` is the type variable declared as `List<E>`.
      */
     fun extractClassSupertypes(c: IrClass, id: Label<out DbReftype>, typeArgsQ: List<IrTypeArgument>? = null) {
+        extractClassSupertypes(c.superTypes, c.typeParameters, id, typeArgsQ)
+    }
+
+    fun extractClassSupertypes(superTypes: List<IrType>, typeParameters: List<IrTypeParameter>, id: Label<out DbReftype>, typeArgsQ: List<IrTypeArgument>? = null) {
         // Note we only need to substitute type args here because it is illegal to directly extend a type variable.
         // (For example, we can't have `class A<E> : E`, but can have `class A<E> : Comparable<E>`)
         val subbedSupertypes = typeArgsQ?.let { typeArgs ->
-            c.superTypes.map {
-                it.substituteTypeArguments(c.typeParameters, typeArgs)
+            superTypes.map {
+                it.substituteTypeArguments(typeParameters, typeArgs)
             }
-        } ?: c.superTypes
+        } ?: superTypes
 
         for(t in subbedSupertypes) {
             when(t) {
