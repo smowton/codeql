@@ -291,6 +291,7 @@ open class KotlinUsesExtractor(
         }
         // We use this when we don't actually have an IrClass for a class
         // we want to refer to
+        // TODO: Eliminate the need for this if possible
         fun makeClass(pkgName: String, className: String): Label<DbClass> {
             val pkgId = extractPackage(pkgName)
             val label = "@\"class;$pkgName.$className\""
@@ -562,7 +563,7 @@ class X {
         val label = if (parent is IrClass) {
             // todo: fix this. Ugly string concat to handle nested class IDs.
             // todo: Can the containing class have type arguments?
-            "${getUnquotedClassLabel(parent, listOf())}\$$cls"
+            "${getUnquotedClassLabel(parent, listOf()).classLabel}\$$cls"
         } else {
             if (pkg.isEmpty()) cls else "$pkg.$cls"
         }
