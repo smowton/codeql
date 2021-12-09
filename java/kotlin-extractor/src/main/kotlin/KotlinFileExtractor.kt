@@ -8,6 +8,8 @@ import com.semmle.extractor.java.OdasaOutput
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.builtins.functions.BuiltInFunctionArity
 import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
@@ -90,6 +92,27 @@ open class KotlinFileExtractor(
         // todo: add type bounds
 
         return id
+    }
+
+    fun extractVisibility(elementForLocation: IrElement, id: Label<out DbModifiable>, v: DescriptorVisibility) {
+        when (v) {
+            DescriptorVisibilities.PRIVATE -> addModifiers(id, "private")
+            DescriptorVisibilities.PROTECTED -> addModifiers(id, "protected")
+            DescriptorVisibilities.PUBLIC -> addModifiers(id, "public")
+            DescriptorVisibilities.INTERNAL -> addModifiers(id, "internal")
+            else -> logger.warnElement(Severity.ErrorSevere, "Unexpected visibility: $v", elementForLocation)
+        }
+    }
+
+    fun extractClassModifiers(c: IrClass, id: Label<out DbClassorinterface>) {
+        when (c.modality) {
+            Modality.FINAL -> addModifiers(id, "final")
+            Modality.SEALED -> addModifiers(id, "sealed")
+            Modality.OPEN -> { } // This is the default
+            Modality.ABSTRACT -> addModifiers(id, "abstract")
+            else -> logger.warnElement(Severity.ErrorSevere, "Unexpected class modality: ${c.modality}", c)
+        }
+        extractVisibility(c, id, c.visibility)
     }
 
     fun extractClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>): Label<out DbClassorinterface> {
@@ -434,6 +457,8 @@ open class KotlinFileExtractor(
             extractBody(body, id)
         }
 
+        extractVisibility(f, id, f.visibility)
+
         currentFunction = null
         return id
     }
@@ -444,6 +469,9 @@ open class KotlinFileExtractor(
         val type = useType(f.type)
         tw.writeFields(id, f.name.asString(), type.javaResult.id, type.kotlinResult.id, parentId, id)
         tw.writeHasLocation(id, locId)
+
+        extractVisibility(f, id, f.visibility)
+
         return id
     }
 
@@ -484,6 +512,8 @@ open class KotlinFileExtractor(
             val fieldId = extractField(bf, parentId)
             tw.writeKtPropertyBackingFields(id, fieldId)
         }
+
+        extractVisibility(p, id, p.visibility)
     }
 
     fun extractEnumEntry(ee: IrEnumEntry, parentId: Label<out DbReftype>) {

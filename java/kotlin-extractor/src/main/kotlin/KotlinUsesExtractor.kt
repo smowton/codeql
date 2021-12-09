@@ -706,12 +706,6 @@ class X {
     fun addModifiers(modifiable: Label<out DbModifiable>, vararg modifiers: String) =
         modifiers.forEach { tw.writeHasModifier(modifiable, extractModifier(it)) }
 
-    fun extractClassModifiers(c: IrClass, id: Label<out DbClassorinterface>) {
-        if (c.modality == Modality.ABSTRACT) {
-            addModifiers(id, "abstract")
-        }
-    }
-
     /**
      * Extracts the supertypes of class `c` with arguments `typeArgsQ`, or if `typeArgsQ` is null, the non-paramterised
      * version of `c`. `id` is the label of this class or class instantiation.
