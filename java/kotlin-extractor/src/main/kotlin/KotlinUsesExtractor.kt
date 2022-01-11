@@ -91,6 +91,16 @@ open class KotlinUsesExtractor(
         return KotlinSourceFileExtractor(newLogger, newTrapWriter, clsFile, externalClassExtractor, primitiveTypeMapping, pluginContext, genericSpecialisationsExtracted)
     }
 
+    // The Kotlin compiler internal representation of Outer<T>.Inner<S>.InnerInner<R> is InnerInner<R, S, T>. This function returns just `R`.
+    fun removeOuterClassTypeArgs(c: IrClass, argsIncludingOuterClasses: List<IrTypeArgument>?): List<IrTypeArgument>? {
+        return argsIncludingOuterClasses?.let {
+            if (it.size > c.typeParameters.size)
+                it.take(c.typeParameters.size)
+            else
+                null
+        } ?: argsIncludingOuterClasses
+    }
+
     // `typeArgs` can be null to describe a raw generic type.
     // For non-generic types it will be zero-length list.
     fun useClassInstance(c: IrClass, typeArgs: List<IrTypeArgument>?, inReceiverContext: Boolean = false): UseClassInstanceResult {
@@ -146,7 +156,10 @@ open class KotlinUsesExtractor(
 
     // `typeArgs` can be null to describe a raw generic type.
     // For non-generic types it will be zero-length list.
-    fun addClassLabel(c: IrClass, typeArgs: List<IrTypeArgument>?, inReceiverContext: Boolean = false): TypeResult<DbClassorinterface> {
+    fun addClassLabel(c: IrClass, argsIncludingOuterClasses: List<IrTypeArgument>?, inReceiverContext: Boolean = false): TypeResult<DbClassorinterface> {
+        // For all purposes ignore type arguments relating to outer classes.
+        val typeArgs = removeOuterClassTypeArgs(c, argsIncludingOuterClasses)
+
         val classLabelResult = getClassLabel(c, typeArgs)
 
         var instanceSeenBefore = true
@@ -163,7 +176,7 @@ open class KotlinUsesExtractor(
             val extractorWithCSource by lazy { this.withSourceFileOfClass(c) }
 
             if (!instanceSeenBefore) {
-                extractorWithCSource.extractClassInstance(c, typeArgs)
+                extractorWithCSource.extractClassInstance(c, argsIncludingOuterClasses)
             }
 
             if (inReceiverContext && genericSpecialisationsExtracted.add(classLabelResult.classLabel)) {
@@ -534,7 +547,8 @@ class X {
                             params
                         }
         val paramTypeIds = allParams.joinToString { "{${useType(erase(it.type)).javaResult.id}}" }
-        val returnTypeId = useType(erase(returnType)).javaResult.id
+        val labelReturnType = if (name == "<init>") pluginContext.irBuiltIns.unitType else erase(returnType)
+        val returnTypeId = useType(labelReturnType, TypeContext.RETURN).javaResult.id
         return "@\"callable;{$parentId}.$name($paramTypeIds){$returnTypeId}\""
     }
 
