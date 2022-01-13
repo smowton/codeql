@@ -112,7 +112,7 @@ open class KotlinUsesExtractor(
     /**
      * Gets a KotlinFileExtractor based on this one, except it attributes locations to the file that declares the given class.
      */
-    private fun withSourceFileOfClass(cls: IrClass): KotlinFileExtractor {
+    private fun withFileOfClass(cls: IrClass): KotlinFileExtractor {
         val clsFile = cls.fileOrNull
 
         if (isExternalDeclaration(cls) || clsFile == null) {
@@ -213,7 +213,7 @@ open class KotlinUsesExtractor(
         if (typeArgs == null || typeArgs.isNotEmpty()) {
             // If this is a generic type instantiation or a raw type then it has no
             // source entity, so we need to extract it here
-            val extractorWithCSource by lazy { this.withSourceFileOfClass(c) }
+            val extractorWithCSource by lazy { this.withFileOfClass(c) }
 
             if (!instanceSeenBefore) {
                 extractorWithCSource.extractClassInstance(c, argsIncludingOuterClasses)
