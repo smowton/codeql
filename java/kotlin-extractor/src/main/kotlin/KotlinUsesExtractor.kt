@@ -116,22 +116,23 @@ open class KotlinUsesExtractor(
     /**
      * Gets a KotlinFileExtractor based on this one, except it attributes locations to the file that declares the given class.
      */
-    private fun withSourceFileOfClass(cls: IrClass): KotlinFileExtractor {
+    private fun withFileOfClass(cls: IrClass): KotlinFileExtractor {
         val clsFile = cls.fileOrNull
 
         if (isExternalDeclaration(cls) || clsFile == null) {
-            val newTrapWriter = tw.makeFileTrapWriter(getIrClassBinaryPath(cls), false)
+            val filePath = getIrClassBinaryPath(cls)
+            val newTrapWriter = tw.makeFileTrapWriter(filePath, false)
             val newLogger = FileLogger(logger.logCounter, newTrapWriter)
-            return KotlinFileExtractor(newLogger, newTrapWriter, dependencyCollector, externalClassExtractor, primitiveTypeMapping, pluginContext, genericSpecialisationsExtracted)
+            return KotlinFileExtractor(newLogger, newTrapWriter, filePath, dependencyCollector, externalClassExtractor, primitiveTypeMapping, pluginContext, genericSpecialisationsExtracted)
         }
 
-        if (this is KotlinSourceFileExtractor && this.file == clsFile) {
+        if (this is KotlinFileExtractor && this.filePath == clsFile.path) {
             return this
         }
 
         val newTrapWriter = tw.makeSourceFileTrapWriter(clsFile, false)
         val newLogger = FileLogger(logger.logCounter, newTrapWriter)
-        return KotlinSourceFileExtractor(newLogger, newTrapWriter, clsFile, externalClassExtractor, primitiveTypeMapping, pluginContext, genericSpecialisationsExtracted)
+        return KotlinFileExtractor(newLogger, newTrapWriter, clsFile.path, null, externalClassExtractor, primitiveTypeMapping, pluginContext, genericSpecialisationsExtracted)
     }
 
     // The Kotlin compiler internal representation of Outer<T>.Inner<S>.InnerInner<R> is InnerInner<R, S, T>. This function returns just `R`.
@@ -251,7 +252,7 @@ open class KotlinUsesExtractor(
         if (argsIncludingOuterClasses == null || argsIncludingOuterClasses.isNotEmpty()) {
             // If this is a generic type instantiation or a raw type then it has no
             // source entity, so we need to extract it here
-            val extractorWithCSource by lazy { this.withSourceFileOfClass(c) }
+            val extractorWithCSource by lazy { this.withFileOfClass(c) }
 
             if (!instanceSeenBefore) {
                 extractorWithCSource.extractClassInstance(c, argsIncludingOuterClasses)
