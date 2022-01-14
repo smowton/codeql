@@ -71,7 +71,7 @@ predicate hasEndpointIdentificationAlgorithm(Variable ssl) {
  * Cast of Socket to SSLSocket
  */
 predicate sslCast(MethodAccess createSSL) {
-  exists(Variable ssl, CastExpr ce |
+  exists(Variable ssl, CastingExpr ce |
     ce.getExpr() = createSSL and
     ce.getControlFlowNode().getASuccessor().(VariableAssign).getDestVar() = ssl and
     ssl.getType() instanceof SSLSocket //With a type cast `SSLSocket socket = (SSLSocket) socketFactory.createSocket("www.example.com", 443)`
@@ -85,7 +85,7 @@ predicate hasFlowPath(MethodAccess createSSL, Variable ssl) {
   (
     createSSL = ssl.getAnAssignedValue()
     or
-    exists(CastExpr ce |
+    exists(CastingExpr ce |
       ce.getExpr() = createSSL and
       ce.getControlFlowNode().getASuccessor().(VariableAssign).getDestVar() = ssl //With a type cast like SSLSocket socket = (SSLSocket) socketFactory.createSocket("www.example.com", 443);
     )

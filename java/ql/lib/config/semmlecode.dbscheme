@@ -692,11 +692,14 @@ case @expr.kind of
 | 74  = @whenexpr
 | 75  = @getclassexpr
 | 76  = @safecastexpr
-| 77  = @notinstanceofexpr
-| 78  = @stmtexpr
-| 79  = @stringtemplateexpr
-| 80  = @varargexpr
-| 81  = @notnullexpr
+| 77  = @implicitcastexpr
+| 78  = @implicitnotnullexpr
+| 79  = @implicitcoerciontounitexpr
+| 80  = @notinstanceofexpr
+| 81  = @stmtexpr
+| 82  = @stringtemplateexpr
+| 83  = @varargexpr
+| 84  = @notnullexpr
 ;
 
 /** Holds if this `when` expression was written as an `if` expression. */
