@@ -362,11 +362,19 @@ bad84 = /^((?:a{0|-)|\w\{\d)+X$/
 bad85 = /^((?:a{0,|-)|\w\{\d,)+X$/
 bad86 = /^((?:a{0,2|-)|\w\{\d,\d)+X$/
 
-# GOOD: 
-good42 = /^((?:a{0,2}|-)|\w\{\d,\d\})+X$/
+# NOT GOOD 
+bad87 = /^((?:a{0,2}|-)|\w\{\d,\d\})+X$/
 
 # NOT GOOD
-bad87 = /^X(\u0061|a)*Y$/
+bad88 = /^X(\u0061|a)*Y$/
 
 # GOOD
 good43 = /^X(\u0061|b)+Y$/
+
+# NOT GOOD
+bad88 = /X([[:digit:]]|\d)+Y/
+
+# NOT GOOD
+bad89 = /\G(a|\w)*$/
+bad90 = /\b(a|\w)*$/
+

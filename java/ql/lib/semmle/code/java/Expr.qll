@@ -169,7 +169,7 @@ class CompileTimeConstantExpr extends Expr {
    */
   pragma[nomagic]
   string getStringValue() {
-    result = this.(StringLiteral).getRepresentedString()
+    result = this.(StringLiteral).getValue()
     or
     result =
       this.(AddExpr).getLeftOperand().(CompileTimeConstantExpr).getStringValue() +
@@ -716,6 +716,17 @@ class DoubleLiteral extends Literal, @doubleliteral {
   override string getAPrimaryQlClass() { result = "DoubleLiteral" }
 }
 
+bindingset[s]
+private int fromHex(string s) {
+  exists(string digits | s.toUpperCase() = digits |
+    result =
+      sum(int i |
+        |
+        "0123456789ABCDEF".indexOf(digits.charAt(i)).bitShiftLeft((digits.length() - i - 1) * 4)
+      )
+  )
+}
+
 /** A character literal. For example, `'\n'`. */
 class CharacterLiteral extends Literal, @characterliteral {
   override string getAPrimaryQlClass() { result = "CharacterLiteral" }
@@ -734,7 +745,11 @@ class CharacterLiteral extends Literal, @characterliteral {
    * this literal. The result is the same as if the Java code had cast
    * the character to an `int`.
    */
-  int getCodePointValue() { result.toUnicode() = this.getValue() }
+  int getCodePointValue() {
+    if this.getLiteral().matches("'\\u____'")
+    then result = fromHex(this.getLiteral().substring(3, 7))
+    else result.toUnicode() = this.getValue()
+  }
 }
 
 /**
@@ -748,9 +763,21 @@ class CharacterLiteral extends Literal, @characterliteral {
  */
 class StringLiteral extends Literal, @stringliteral {
   /**
+   * Gets the string represented by this string literal, that is, the content
+   * of the literal without enclosing quotes and with escape sequences translated.
+   *
+   * Unpaired Unicode surrogate characters (U+D800 to U+DFFF) are replaced with the
+   * replacement character U+FFFD.
+   */
+  override string getValue() { result = super.getValue() }
+
+  /**
+   * DEPRECATED: This predicate will be removed in a future version because
+   * it is just an alias for `getValue()`; that predicate should be used instead.
+   *
    * Gets the literal string without the quotes.
    */
-  string getRepresentedString() { result = this.getValue() }
+  deprecated string getRepresentedString() { result = this.getValue() }
 
   /** Holds if this string literal is a text block (`""" ... """`). */
   predicate isTextBlock() { this.getLiteral().matches("\"\"\"%") }
@@ -1280,7 +1307,7 @@ class MemberRefExpr extends FunctionalExpr, @memberref {
    */
   RefType getReceiverType() {
     exists(Stmt stmt, Expr resultExpr |
-      stmt = asMethod().getBody().(SingletonBlock).getStmt() and
+      stmt = this.asMethod().getBody().(SingletonBlock).getStmt() and
       (
         resultExpr = stmt.(ReturnStmt).getResult()
         or
