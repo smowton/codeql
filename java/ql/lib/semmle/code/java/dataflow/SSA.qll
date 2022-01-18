@@ -1111,8 +1111,11 @@ class SsaPhiNode extends SsaVariable, TSsaPhiNode {
   }
 }
 
-private class RefTypeCastExpr extends CastExpr {
-  RefTypeCastExpr() { this.getType() instanceof RefType }
+private class RefTypeCastingExpr extends CastingExpr {
+  RefTypeCastingExpr() {
+    this.getType() instanceof RefType and
+    not this instanceof SafeCastExpr
+  }
 }
 
 /**
@@ -1127,5 +1130,5 @@ Expr sameValue(SsaVariable v, VarAccess va) {
   or
   result.(AssignExpr).getSource() = sameValue(v, va)
   or
-  result.(RefTypeCastExpr).getExpr() = sameValue(v, va)
+  result.(RefTypeCastingExpr).getExpr() = sameValue(v, va)
 }
