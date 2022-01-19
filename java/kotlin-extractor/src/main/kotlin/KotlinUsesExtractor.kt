@@ -665,9 +665,7 @@ class X {
         val allParams = if (extensionReceiverParameter == null) {
                             parameters
                         } else {
-                            val params = mutableListOf(extensionReceiverParameter)
-                            params.addAll(parameters)
-                            params
+                            listOf(extensionReceiverParameter) + parameters
                         }
 
         val substitutionMap = classTypeArgsIncludingOuterClasses?.let { notNullArgs ->
