@@ -89,7 +89,7 @@ open class KotlinFileExtractor(
             is IrFile -> return "@\"${element.path};sourcefile\"" // todo: remove copy-pasted code
             is IrClass -> return getClassLabel(element, listOf()).classLabel
             is IrTypeParameter -> return getTypeParameterLabel(element)
-            is IrFunction -> return getFunctionLabel(element)
+            is IrFunction -> return getFunctionLabel(element, null)
             is IrValueParameter -> return getValueParameterLabel(element, null)
             is IrProperty -> return getPropertyLabel(element)
             is IrField -> return getFieldLabel(element)
@@ -412,7 +412,7 @@ open class KotlinFileExtractor(
         }
 
         // add method:
-        val obinitLabel = getFunctionLabel(c, "<obinit>", listOf(), pluginContext.irBuiltIns.unitType, extensionReceiverParameter = null, functionTypeParameters = listOf(), classTypeArguments = listOf())
+        val obinitLabel = getFunctionLabel(c, parentId, "<obinit>", listOf(), pluginContext.irBuiltIns.unitType, extensionReceiverParameter = null, functionTypeParameters = listOf(), classTypeArgsIncludingOuterClasses = listOf())
         val obinitId = tw.getLabelFor<DbMethod>(obinitLabel)
         val returnType = useType(pluginContext.irBuiltIns.unitType)
         tw.writeMethods(obinitId, "<obinit>", "<obinit>()", returnType.javaResult.id, returnType.kotlinResult.id, parentId, obinitId)
@@ -489,7 +489,7 @@ open class KotlinFileExtractor(
     fun extractFunction(f: IrFunction, parentId: Label<out DbReftype>, extractBody: Boolean, typeSubstitution: TypeSubstitution?, classTypeArgsIncludingOuterClasses: List<IrTypeArgument>?): Label<out DbCallable> {
         DeclarationStackAdjuster(f).use {
 
-            getFunctionTypeParameters(f).mapIndexed { idx, it -> extractTypeParameter(it, idx) }
+            getFunctionTypeParameters(f).mapIndexed { idx, tp -> extractTypeParameter(tp, idx) }
 
             val locId = tw.getLocation(f)
 
@@ -1561,7 +1561,7 @@ open class KotlinFileExtractor(
                 val id = tw.getFreshIdLabel<DbMethodaccess>()
                 val type = useType(e.type)
                 val locId = tw.getLocation(e)
-                val methodLabel = getFunctionLabel(irCallable.parent, "<obinit>", listOf(), e.type, null, functionTypeParameters = listOf(), classTypeArguments = listOf())
+                val methodLabel = getFunctionLabel(irCallable.parent, null, "<obinit>", listOf(), e.type, null, functionTypeParameters = listOf(), classTypeArgsIncludingOuterClasses = listOf())
                 val methodId = tw.getLabelFor<DbMethod>(methodLabel)
                 tw.writeExprs_methodaccess(id, type.javaResult.id, type.kotlinResult.id, exprParent.parent, exprParent.idx)
                 tw.writeHasLocation(id, locId)
