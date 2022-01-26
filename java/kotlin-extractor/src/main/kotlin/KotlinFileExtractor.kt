@@ -4,9 +4,11 @@ import com.github.codeql.comments.CommentExtractor
 import com.github.codeql.utils.TypeSubstitution
 import com.github.codeql.utils.versions.functionN
 import com.github.codeql.utils.substituteTypeAndArguments
+import com.github.codeql.utils.substituteTypeArguments
 import com.github.codeql.utils.toRawType
 import com.semmle.extractor.java.OdasaOutput
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.backend.common.pop
 import org.jetbrains.kotlin.builtins.functions.BuiltInFunctionArity
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.java.JavaVisibilities
@@ -520,11 +522,8 @@ open class KotlinFileExtractor(
 
     fun extractFunctionIfReal(f: IrFunction, parentId: Label<out DbReftype>, extractBody: Boolean, typeSubstitution: TypeSubstitution?, classTypeArgsIncludingOuterClasses: List<IrTypeArgument>?) {
         with("function if real", f) {
-            // TODO: We want to skip these, and use `.target` for
-            // functions, but that causes our type parameter mapping
-            // to go wrong and gives us IndexOutOfBoundsExceptions
-            // if (f.origin == IrDeclarationOrigin.FAKE_OVERRIDE)
-            //     return
+            if (f.origin == IrDeclarationOrigin.FAKE_OVERRIDE)
+                return
             extractFunction(f, parentId, extractBody, typeSubstitution, classTypeArgsIncludingOuterClasses)
         }
     }
@@ -930,6 +929,42 @@ open class KotlinFileExtractor(
         }
     }
 
+    private fun getDeclaringTypeArguments(callTarget: IrFunction, receiverType: IrSimpleType): List<IrTypeArgument> {
+        val declaringType = callTarget.parentAsClass
+        val receiverClass = receiverType.classifier.owner as? IrClass ?: return listOf()
+        val ancestorTypes = ArrayList<IrSimpleType>()
+
+        // Populate ancestorTypes with the path from receiverType's class to its ancestor, callTarget's declaring type.
+        fun walkFrom(c: IrClass): Boolean {
+            if(declaringType == c)
+                return true
+            else {
+                c.superTypes.forEach {
+                    val ancestorClass = (it as? IrSimpleType)?.classifier?.owner as? IrClass ?: return false
+                    ancestorTypes.add(it)
+                    if (walkFrom(ancestorClass))
+                        return true
+                    else
+                        ancestorTypes.pop()
+                }
+                return false
+            }
+        }
+
+        // If a path was found, repeatedly substitute types to get the corresponding specialisation of that ancestor.
+        return if (!walkFrom(receiverClass)) {
+            logger.warnElement(Severity.ErrorSevere, "Failed to find a class declaring ${callTarget.name}", callTarget)
+            listOf()
+        } else {
+            var subbedType = receiverType
+            ancestorTypes.forEach {
+                val thisClass = subbedType.classifier.owner as IrClass
+                subbedType = it.substituteTypeArguments(thisClass.typeParameters, subbedType.arguments) as IrSimpleType
+            }
+            subbedType.arguments
+        }
+    }
+
     fun extractCall(c: IrCall, callable: Label<out DbCallable>, parent: Label<out DbExprparent>, idx: Int, enclosingStmt: Label<out DbStmt>) {
         with("call", c) {
             fun isFunction(pkgName: String, className: String, fName: String, hasQuestionMark: Boolean = false): Boolean {
@@ -983,11 +1018,7 @@ open class KotlinFileExtractor(
             }
     
             fun extractMethodAccess(syntacticCallTarget: IrFunction, extractMethodTypeArguments: Boolean = true, extractClassTypeArguments: Boolean = false) {
-                // TODO: We want to say
-                //     callTarget = syntacticCallTarget.target
-                // but that causes our type parameter mapping
-                // to go wrong and gives us IndexOutOfBoundsExceptions
-                val callTarget = syntacticCallTarget // .target
+                val callTarget = syntacticCallTarget.target
                 val id = tw.getFreshIdLabel<DbMethodaccess>()
                 val type = useType(c.type)
                 val locId = tw.getLocation(c)
@@ -1035,7 +1066,7 @@ open class KotlinFileExtractor(
                     val drType = dr?.type
                     val methodId =
                         if (drType != null && extractClassTypeArguments && drType is IrSimpleType && !isUnspecialised(drType))
-                            useFunction<DbCallable>(callTarget, drType.arguments)
+                            useFunction<DbCallable>(callTarget, getDeclaringTypeArguments(callTarget, drType))
                         else
                             useFunction<DbCallable>(callTarget)
     
