@@ -1084,6 +1084,8 @@ class DiscardExpr extends Expr, @discard_expr {
 
 private class UnknownExpr extends Expr, @unknown_expr {
   override string toString() { result = "Expression" }
+
+  override string getAPrimaryQlClass() { result = "UnknownExpr" }
 }
 
 /**
@@ -1173,7 +1175,9 @@ class WithExpr extends Expr, @with_expr {
   Expr getExpr() { result = this.getChild(0) }
 
   /** Gets the clone method of the `record` that is targetted by this `with` expression. */
-  RecordCloneMethod getCloneMethod() { result = this.getExpr().getType().(Record).getCloneMethod() }
+  RecordCloneMethod getCloneMethod() {
+    result = this.getExpr().getType().(RecordClass).getCloneMethod()
+  }
 
   override string toString() { result = "... with { ... }" }
 
