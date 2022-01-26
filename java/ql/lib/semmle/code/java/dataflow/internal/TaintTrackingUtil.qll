@@ -92,8 +92,6 @@ private module Cached {
     )
     or
     FlowSummaryImpl::Private::Steps::summaryLocalStep(src, sink, false)
-    or
-    entrypointFieldStep(src, sink)
   }
 
   /**
@@ -103,6 +101,7 @@ private module Cached {
   cached
   predicate defaultAdditionalTaintStep(DataFlow::Node src, DataFlow::Node sink) {
     localAdditionalTaintStep(src, sink) or
+    entrypointFieldStep(src, sink) or
     any(AdditionalTaintStep a).step(src, sink)
   }
 
@@ -117,6 +116,12 @@ private module Cached {
     node.asExpr() instanceof ValidatedVariableAccess
   }
 }
+
+/**
+ * Holds if `guard` should be a sanitizer guard in all global taint flow configurations
+ * but not in local taint.
+ */
+predicate defaultTaintSanitizerGuard(DataFlow::BarrierGuard guard) { none() }
 
 import Cached
 
