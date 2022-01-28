@@ -16,11 +16,11 @@ predicate hasName(Element e, string name) {
   or
   primitives(e, name)
   or
-  constrs(e, name, _, _, _, _, _)
+  constrs(e, name, _, _, _, _)
   or
-  methods(e, name, _, _, _, _, _)
+  methods(e, name, _, _, _, _)
   or
-  fields(e, name, _, _, _, _)
+  fields(e, name, _, _, _)
   or
   packages(e, name)
   or
@@ -29,12 +29,12 @@ predicate hasName(Element e, string name) {
   paramName(e, name)
   or
   exists(int pos |
-    params(e, _, _, pos, _, _) and
+    params(e, _, pos, _, _) and
     not paramName(e, _) and
     name = "p" + pos
   )
   or
-  localvars(e, name, _, _, _)
+  localvars(e, name, _, _)
   or
   typeVars(e, name, _, _, _)
   or

@@ -305,11 +305,11 @@ private predicate hasSubtypeStar2(RefType t, RefType sub) {
 
 /** Holds if type `t` declares member `m`. */
 predicate declaresMember(Type t, @member m) {
-  methods(m, _, _, _, _, t, _)
+  methods(m, _, _, _, t, _)
   or
-  constrs(m, _, _, _, _, t, _)
+  constrs(m, _, _, _, t, _)
   or
-  fields(m, _, _, _, t, _)
+  fields(m, _, _, t, _)
   or
   enclInReftype(m, t) and
   // Since the type `@member` in the dbscheme includes all `@reftype`s,
@@ -495,16 +495,16 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
       sup.hasNonInterfaceMethod(m, declaringType, h2) and
       hidden = h1.booleanOr(h2) and
       exists(string signature |
-        methods(m, _, signature, _, _, _, _) and not methods(_, _, signature, _, _, this, _)
+        methods(m, _, signature, _, _, _) and not methods(_, _, signature, _, this, _)
       ) and
       m.isInheritable()
     )
   }
 
   private predicate cannotInheritInterfaceMethod(string signature) {
-    methods(_, _, signature, _, _, this, _)
+    methods(_, _, signature, _, this, _)
     or
-    exists(Method m | this.hasNonInterfaceMethod(m, _, false) and methods(m, _, signature, _, _, _, _))
+    exists(Method m | this.hasNonInterfaceMethod(m, _, false) and methods(m, _, signature, _, _, _))
   }
 
   private predicate interfaceMethodCandidateWithSignature(
@@ -513,7 +513,7 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
     m = this.getAMethod() and
     this = declaringType and
     declaringType instanceof Interface and
-    methods(m, _, signature, _, _, _, _)
+    methods(m, _, signature, _, _, _)
     or
     exists(RefType sup |
       sup.interfaceMethodCandidateWithSignature(m, signature, declaringType) and
@@ -1114,11 +1114,11 @@ class EnumType extends Class {
 
   /** Gets the enum constant with the specified name. */
   EnumConstant getEnumConstant(string name) {
-    fields(result, _, _, _, this, _) and result.hasName(name)
+    fields(result, _, _, this, _) and result.hasName(name)
   }
 
   /** Gets an enum constant declared in this enum type. */
-  EnumConstant getAnEnumConstant() { fields(result, _, _, _, this, _) }
+  EnumConstant getAnEnumConstant() { fields(result, _, _, this, _) }
 
   override predicate isFinal() {
     // JLS 8.9: An enum declaration is implicitly `final` unless it contains
