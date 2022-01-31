@@ -149,7 +149,13 @@ open class KotlinFileExtractor(
             val locId = tw.getLocation(tp)
             tw.writeHasLocation(id, locId)
 
-            // todo: add type bounds
+            tp.superTypes.forEachIndexed { boundIdx, bound ->
+                if(!(bound.isAny() || bound.isNullableAny())) {
+                    tw.getLabelFor<DbTypebound>("@\"bound;$boundIdx;{$id}\"") {
+                        tw.writeTypeBounds(it, useType(bound).javaResult.id as Label<out DbReftype>, boundIdx, id)
+                    }
+                }
+            }
 
             return id
         }
