@@ -745,6 +745,8 @@ case @expr.kind of
 | 83  = @varargexpr
 | 84  = @notnullexpr
 | 85  = @unsafecoerceexpr
+| 86  = @valueeqexpr
+| 87  = @valueneexpr
 ;
 
 /** Holds if this `when` expression was written as an `if` expression. */
@@ -812,7 +814,9 @@ when_branch_else(unique int id: @whenbranch ref);
              | @leexpr
              | @geexpr
              | @eqexpr
-             | @neexpr;
+             | @neexpr
+             | @valueeqexpr
+             | @valueneexpr;
 
 @unaryexpr =   @postincexpr
              | @postdecexpr
