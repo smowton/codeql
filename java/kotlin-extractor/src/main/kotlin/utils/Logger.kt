@@ -5,10 +5,10 @@ import java.util.Date
 import org.jetbrains.kotlin.ir.IrElement
 
 class LogCounter() {
-    public val warningCounts = mutableMapOf<String, Int>()
-    public val warningLimit: Int
+    public val diagnosticCounts = mutableMapOf<String, Int>()
+    public val diagnosticLimit: Int
     init {
-        warningLimit = System.getenv("CODEQL_EXTRACTOR_KOTLIN_WARNING_LIMIT")?.toIntOrNull() ?: 100
+        diagnosticLimit = System.getenv("CODEQL_EXTRACTOR_KOTLIN_DIAGNOSTIC_LIMIT")?.toIntOrNull() ?: 100
     }
 }
 
@@ -33,7 +33,7 @@ open class Logger(val logCounter: LogCounter, open val tw: TrapWriter) {
         return "[${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())} K]"
     }
 
-    private fun getWarningLocation(): String? {
+    private fun getDiagnosticLocation(): String? {
         val st = Exception().stackTrace
         for(x in st) {
             when(x.className) {
@@ -51,6 +51,33 @@ open class Logger(val logCounter: LogCounter, open val tw: TrapWriter) {
         tw.flush()
         System.out.flush()
     }
+
+    fun diagnostic(severity: Severity, msg: String, extraInfo: String?, locationString: String? = null, mkLocationId: () -> Label<DbLocation> = { tw.unknownLocation }) {
+        val diagnosticLoc = getDiagnosticLocation()
+        val diagnosticLocStr = if(diagnosticLoc == null) "<unknown location>" else diagnosticLoc
+        val extraInfoStr = if (extraInfo == null) "" else (extraInfo + "\n")
+        val suffix =
+            if(diagnosticLoc == null) {
+                "    Missing caller information.\n"
+            } else {
+                val count = logCounter.diagnosticCounts.getOrDefault(diagnosticLoc, 0) + 1
+                logCounter.diagnosticCounts[diagnosticLoc] = count
+                when {
+                    logCounter.diagnosticLimit <= 0 -> ""
+                    count == logCounter.diagnosticLimit -> "    Limit reached for diagnostics from $diagnosticLoc.\n"
+                    count > logCounter.diagnosticLimit -> return
+                    else -> ""
+                }
+            }
+        val fullMsg = "$msg\n$extraInfoStr$suffix"
+        val ts = timestamp()
+        // We don't actually make the location until after the `return` above
+        val locationId = mkLocationId()
+        tw.writeDiagnostics(StarLabel(), "CodeQL Kotlin extractor", severity.sev, "", msg, "$ts $fullMsg", locationId)
+        val locStr = if (locationString == null) "" else "At " + locationString + ": "
+        print("$ts Diagnostic($diagnosticLocStr): $locStr$fullMsg")
+    }
+
     fun info(msg: String) {
         val fullMsg = "${timestamp()} $msg"
         tw.writeComment(fullMsg)
@@ -65,47 +92,30 @@ open class Logger(val logCounter: LogCounter, open val tw: TrapWriter) {
         info(msg)
     }
     fun trace(msg: String, exn: Exception) {
-        trace(msg + " // " + exn)
-    }
-    fun warn(severity: Severity, msg: String, locationString: String? = null, mkLocationId: () -> Label<DbLocation> = { tw.unknownLocation }) {
-        val warningLoc = getWarningLocation()
-        val warningLocStr = if(warningLoc == null) "<unknown location>" else warningLoc
-        val suffix =
-            if(warningLoc == null) {
-                "    Missing caller information.\n"
-            } else {
-                val count = logCounter.warningCounts.getOrDefault(warningLoc, 0) + 1
-                logCounter.warningCounts[warningLoc] = count
-                when {
-                    logCounter.warningLimit <= 0 -> ""
-                    count == logCounter.warningLimit -> "    Limit reached for warnings from $warningLoc.\n"
-                    count > logCounter.warningLimit -> return
-                    else -> ""
-                }
-            }
-        val ts = timestamp()
-        // We don't actually make the location until after the `return` above
-        val locationId = mkLocationId()
-        tw.writeDiagnostics(StarLabel(), "CodeQL Kotlin extractor", severity.sev, "", msg, "$ts $msg\n$suffix", locationId)
-        val locStr = if (locationString == null) "" else "At " + locationString + ": "
-        print("$ts Warning($warningLocStr): $locStr$msg\n$suffix")
+        trace(msg + "\n" + exn.stackTraceToString())
     }
     fun warn(msg: String, exn: Exception) {
-        warn(Severity.Warn, msg + " // " + exn)
+        warn(msg, exn.stackTraceToString())
+    }
+    fun warn(msg: String, extraInfo: String?) {
+        diagnostic(Severity.Warn, msg, extraInfo)
     }
     fun warn(msg: String) {
-        warn(Severity.Warn, msg)
+        warn(msg, null)
+    }
+    fun error(msg: String, extraInfo: String?) {
+        diagnostic(Severity.Error, msg, extraInfo)
     }
     fun error(msg: String) {
-        warn(Severity.Error, msg)
+        error(msg, null)
     }
     fun error(msg: String, exn: Exception) {
-        error(msg + " // " + exn)
+        error(msg, exn.stackTraceToString())
     }
-    fun printLimitedWarningCounts() {
-        for((caller, count) in logCounter.warningCounts) {
-            if(count >= logCounter.warningLimit) {
-                val msg = "Total of $count warnings from $caller.\n"
+    fun printLimitedDiagnosticCounts() {
+        for((caller, count) in logCounter.diagnosticCounts) {
+            if(count >= logCounter.diagnosticLimit) {
+                val msg = "Total of $count diagnostics from $caller.\n"
                 tw.writeComment(msg)
                 print(msg)
             }
@@ -118,9 +128,15 @@ class FileLogger(logCounter: LogCounter, override val tw: FileTrapWriter): Logge
         return "[${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())} K]"
     }
 
-    fun warnElement(severity: Severity, msg: String, element: IrElement) {
+    fun warnElement(msg: String, element: IrElement) {
         val locationString = tw.getLocationString(element)
         val mkLocationId = { tw.getLocation(element) }
-        warn(severity, msg, locationString, mkLocationId)
+        diagnostic(Severity.Warn, msg, null, locationString, mkLocationId)
+    }
+
+    fun errorElement(msg: String, element: IrElement) {
+        val locationString = tw.getLocationString(element)
+        val mkLocationId = { tw.getLocation(element) }
+        diagnostic(Severity.Error, msg, null, locationString, mkLocationId)
     }
 }
