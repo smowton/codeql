@@ -603,7 +603,7 @@ module Public {
       c = call.asSummarizedCallable() and i = idx
     }
 
-    override string toString() { result = "parameter " + i + " of " + c.toString() }
+    override string toString() { result = "parameter " + i + " of " + c.asFunction().getQualifiedName() }
 
     override predicate hasLocationInfo(string fp, int sl, int sc, int el, int ec) {
       c.hasLocationInfo(fp, sl, sc, el, ec)
