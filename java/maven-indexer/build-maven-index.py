@@ -185,7 +185,7 @@ else:
 
 ### All HTTP fetching complete -- now use make again for the last few stages: inverting the index, and selecting preferred packages.
 
-all_indices_file = os.path.join(workingdir, "all_indices.txt")
+all_indices_file = os.path.join(workingdir, "all-indices.txt")
 indices_not_fetched = set(local_path for (url, local_path) in errors)
 
 with open(all_indices_file, "w") as f:
@@ -200,7 +200,7 @@ invert_index_script = os.path.join(script_dir, "invert-package-index.py")
 pick_jars_script = os.path.join(script_dir, "pick-best-jars.py")
 
 with open(makefile, "w") as f:
-  f.write("%s: %s\n\tpython %s %s > %s\n\n" % (inverted_index_file, last_fetch_timestamp, invert_index_script, all_indices_file, inverted_index_file))
-  f.write("%s: %s\n\tpython %s %s > %s\n\n" % (package_index_file, inverted_index_file, pick_jars_script, inverted_index_file, package_index_file))
+  f.write("%s: %s\n\tpython %s %s %s\n\n" % (inverted_index_file, last_fetch_timestamp, invert_index_script, all_indices_file, inverted_index_file))
+  f.write("%s: %s\n\tpython %s %s %s\n\n" % (package_index_file, inverted_index_file, pick_jars_script, inverted_index_file, package_index_file))
 
 subprocess.check_call(["make", "-C", workingdir, "-f", makefile, package_index_file])
