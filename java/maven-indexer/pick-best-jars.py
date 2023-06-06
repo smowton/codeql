@@ -8,36 +8,26 @@
 import sys
 import os.path
 import listzip
-
-verbose = len(sys.argv) >= 3 and sys.argv[2] == "--verbose"
-
-jar_index_cache = dict()
+import shutil
+import multiprocessing
+import concurrent.futures
 
 def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
-def _get_jar_index(jarname):
-  if jarname not in jar_index_cache:
-    bypackage = dict()
-    cd_file = jarname[:-6] + ".cd"
-    zip_suffix = read_bytes(jarname) + read_bytes(cd_file)
-    for l in listzip.listzip(zip_suffix):
-      if l.endswith(".class"):
-        lpackage = os.path.dirname(l)
-        cname = os.path.basename(l)
-        if lpackage not in bypackage:
-          bypackage[lpackage] = set()
-        bypackage[lpackage].add(cname)
-    jar_index_cache[jarname] = bypackage
-  return jar_index_cache[jarname]
-
-def get_jar_index(jarname):
-  try:
-    return _get_jar_index(jarname)
-  except Exception as e:
-    print("Failed to read " + jarname, file = sys.stderr)
-    raise e
+def read_jar_index(jarname):
+  bypackage = dict()
+  cd_file = jarname[:-6] + ".cd"
+  zip_suffix = read_bytes(jarname) + read_bytes(cd_file)
+  for l in listzip.listzip(zip_suffix):
+    if l.endswith(".class"):
+      lpackage = os.path.dirname(l)
+      cname = os.path.basename(l)
+      if lpackage not in bypackage:
+        bypackage[lpackage] = set()
+      bypackage[lpackage].add(cname)
+  return bypackage
 
 def get_neutral_superpackages(package):
   superpackages = []
@@ -86,7 +76,6 @@ def drop_redundant_candidates(package, candidate_scores):
 def pick_best_jars(package, candidates):
   best_jar = None
 
-  candidates = [(c, get_jar_index(c)) for c in candidates]
   # Packages defined by every candidate -- 99% certainly part of the same product.
   universal_packages = set.intersection(*(set(index.keys()) for (c, index) in candidates))
   # Superpackages of the universal packages -- their children are maybe part of the same product; neither rewarded nor punished.
@@ -110,11 +99,82 @@ def pick_best_jars(package, candidates):
   # Drop jars that are wholly shadowed by better candidates
   return drop_redundant_candidates(package, candidate_scores)
 
-with open(sys.argv[1], "r") as f:
-  for (i, l) in enumerate(f):
-    l = l.strip().split()
-    if l[1] == "1":
-      print("%s=%s" % (l[0], l[2][:-6]))
-    else:
-      output_jars = pick_best_jars(l[0], l[2:])
-      print("%s=%s" % (l[0], ",".join(j[:-6] for j in output_jars)))
+def _pick_best_jars(args):
+  pick_best_jars(*args)
+
+if __name__ == '__main__':
+
+  verbose = len(sys.argv) >= 3 and sys.argv[2] == "--verbose"
+
+  try:
+    with open(sys.argv[2] + ".input", "r") as f:
+      oldjars = dict()
+      for l in f:
+        packagename = l.split()[0]
+        oldjars[packagename] = l.strip()
+  except FileNotFoundError as e:
+    oldjars = None
+
+  if oldjars is not None:
+    try:
+      oldresults = dict()
+      with open(sys.argv[2], "r") as f:
+        for l in f:
+          l = l.strip()
+          packagename = l.split("=")[0]
+          oldresults[packagename] = l
+    except FileNotFoundError as e:
+      oldjars = None
+      oldresults = None
+
+  def should_reuse_result(packagename, inputline):
+    return oldjars is not None and oldjars.get(packagename, None) == inputline and oldresults is not None and packagename in oldresults
+
+  needed_jars = set()
+  packages_to_compute = []
+
+  with open(sys.argv[1], "r") as f:
+    for (i, l) in enumerate(f):
+      l = l.strip()
+      bits = l.split()
+      if bits[1] != "1" and not should_reuse_result(bits[0], l):
+        for jar in bits[2:]:
+          needed_jars.add(jar)
+        packages_to_compute.append((bits[0], bits[2:]))
+
+  needed_jars = list(needed_jars)
+  print("Loading indices from %d jars" % len(needed_jars), file = sys.stderr)
+
+  spawn_mp_context = multiprocessing.get_context('spawn')
+
+  with concurrent.futures.ProcessPoolExecutor(mp_context = spawn_mp_context) as executor:
+    loaded_jars = executor.map(read_jar_index, needed_jars)
+
+  jar_indices = dict(zip(needed_jars, loaded_jars))
+
+  # complex_package_tasks = [(packagename, [(j, jar_indices[j]) for j in jars]) for (packagename, jars) in packages_to_compute]
+
+  # Ensure the big global index isn't pickled and sent to worker processes:
+  # jar_indices = None
+
+  print("Computing results for %d packages" % len(packages_to_compute), file = sys.stderr)
+  # with concurrent.futures.ProcessPoolExecutor(mp_context = spawn_mp_context) as executor:
+  # complex_package_results = executor.map(_pick_best_jars, complex_package_tasks, chunksize = 1000)
+
+  # complex_package_results = dict(zip(packages_to_compute, complex_package_results))
+
+  with open(sys.argv[1], "r") as f, open(sys.argv[2], "w") as outf:
+    for (i, l) in enumerate(f):
+      l = l.strip()
+      bits = l.split()
+      packagename = bits[0]
+      if bits[1] == "1":
+        print("%s=%s" % (packagename, bits[2][:-6]), file = outf)
+      elif should_reuse_result(packagename, l):
+        print(oldresults[packagename], file = outf)
+      else:
+        # output_jars = complex_package_results[bits[0]]
+        output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]])
+        print("%s=%s" % (packagename, ",".join(j[:-6] for j in output_jars)), file = outf)
+
+  shutil.copy(sys.argv[1], sys.argv[2] + ".input")
