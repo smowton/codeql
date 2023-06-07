@@ -11,7 +11,7 @@ def add_index(fname, index_bytes):
   for l in listzip.listzip(index_bytes):
     if l.endswith(".class"):
       package = os.path.dirname(l)
-      if package == "" or package.startswith("META-INF") or package.startswith("BOOT-INF"):
+      if package == "" or package.startswith("META-INF") or package.startswith("BOOT-INF") or " " in package:
          continue
       if package not in index:
         index[package] = set()

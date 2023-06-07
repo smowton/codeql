@@ -65,6 +65,9 @@ with open(os.path.join(workingdir, "jars-to-index.txt"), "r") as f:
     local_path = os.path.join(jar_indices_dir, relative_url)
     jars_to_fetch.append((url, local_path))
 
+def escape_dquotes(s):
+  return s.replace('"', '\\"')
+
 def write_curl_config(curl_config, requests, get_additional_options):
   n_written = 0
   errors = []
@@ -88,7 +91,7 @@ def write_curl_config(curl_config, requests, get_additional_options):
         if n_written != 0:
           curl_config_f.write("--next\n")
         additional_options_text = "".join(opt + "\n" for opt in options)
-        curl_config_f.write("%surl = \"%s\"\noutput = \"%s\"\n" % (additional_options_text, url, local_path))
+        curl_config_f.write("%surl = \"%s\"\noutput = \"%s\"\n" % (additional_options_text, escape_dquotes(url), escape_dquotes(local_path)))
         os.makedirs(os.path.dirname(local_path), exist_ok = True)
         n_written += 1
 
