@@ -33,7 +33,10 @@ public class Main {
   private static Set<String> fieldsUAndI = Set.of("u", "i");
 
   private static boolean isJarRecord(String ufield, String ifield) {
-	return (ufield.endsWith("|NA") || ufield.endsWith("tests|jar")) && ifield.endsWith("|jar");
+    return ufield.endsWith("|NA") || ufield.endsWith("tests|jar");
+    // Checking for the file extension declared by the 'i' field seems to be simply unreliable --
+    // the index only contains one record no matter how many files were uploaded (jars, poms, signatures)...
+    // and seems to choose among those extensions arbitrarily
   }
   
   public static void run(String inputDirStr) throws IOException {
