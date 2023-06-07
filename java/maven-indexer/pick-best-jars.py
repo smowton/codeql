@@ -16,7 +16,7 @@ def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
-def read_jar_index(jarname):
+def _read_jar_index(jarname):
   bypackage = dict()
   cd_file = jarname[:-6] + ".cd"
   zip_suffix = read_bytes(jarname) + read_bytes(cd_file)
@@ -28,6 +28,12 @@ def read_jar_index(jarname):
         bypackage[lpackage] = set()
       bypackage[lpackage].add(cname)
   return bypackage
+
+def read_jar_index(jarname):
+  try:
+    return _read_jar_index(jarname)
+  except Exception as e:
+    raise Exception("Failed to read " + jarname) from e
 
 def get_neutral_superpackages(package):
   superpackages = []
