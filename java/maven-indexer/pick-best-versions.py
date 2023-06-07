@@ -71,6 +71,9 @@ for l in sys.stdin:
   u_fields = u.split("|")
   if len(u_fields) == 5:
     artifact = (u_fields[0], u_fields[1], u_fields[3]) # groupId, artifactId, classifier
+  elif len(u_fields) < 4:
+    print("Bad Maven index entry: " + l.strip(), file = sys.stderr)
+    continue
   else:
     artifact = (u_fields[0], u_fields[1])
   version = u_fields[2]
