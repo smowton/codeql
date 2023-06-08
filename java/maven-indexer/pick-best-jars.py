@@ -5,6 +5,7 @@
 # Classes-in-package ascending should favour newer versions of a package (which typically define less classes) and/or selective shades which have picked a few classes to include
 # Classes-out-of-package should exclude jars that have shaded this package in, and/or projects distributed as individual modules as well as an `-all` package.
 
+import re
 import sys
 import os.path
 import listzip
@@ -35,34 +36,43 @@ def read_jar_index(jarname):
   except Exception as e:
     raise Exception("Failed to read " + jarname) from e
 
-def get_neutral_superpackages(package):
-  superpackages = []
-  package = os.path.dirname(package)
-  while package != "":
-    superpackages.append(package)
-    package = os.path.dirname(package)
-  if len(superpackages) > 0 and len(superpackages[-1]) <= 4:
-    superpackages.pop() # Don't consider org/, com/, uk/, java/ and so on as meaningful common superpackages (but android/ is a useful common superpackage)
-  return superpackages
+# A list of known package prefixes that are too general to use as a heuristic for sharing a common product:
+# (very short prefixes like "org" are excluded already):
+overly_general_package_prefixes = set([
+  ("org", "apache"),
+  ("org", "eclipse")
+])
 
-def has_neutral_superpackage(package, neutral_superpackages):
-  package = os.path.dirname(package)
-  while package != "":
-    if package in neutral_superpackages:
-      return True
-    package = os.path.dirname(package)
-  return False
+def prefix_too_general(prefix):
+  if len(prefix) == 1 and len(prefix[0]) <= 4: # Reject very short prefixes like org/, com/, uk/ and so on.
+    return True
+  return tuple(prefix) in overly_general_package_prefixes
 
-def get_package_score(package, universal_packages, neutral_superpackages):
+# Return the most general superpackage of package that we estimate indicates another package in the same product.
+# Note this might be exactly 'package', indicating its subpackages should be considered neutral, or might be an ancestor, in which case some of 'package's siblings should also be considered netural.
+def get_neutral_superpackage(package):
+  bits = package.split("/")
+  prefixlen = 1
+  while prefixlen < len(bits) and prefix_too_general(bits[:prefixlen]):
+    prefixlen += 1
+  if prefix_too_general(bits[:prefixlen]):
+    return None
+  else:
+    return "/".join(bits[:prefixlen])
+
+def has_neutral_superpackage(package, neutral_superpackage_re):
+  return neutral_superpackage_re.match(package) is not None
+
+def get_package_score(package, universal_packages, neutral_superpackage_re):
   if package in universal_packages:
     return 1
-  elif has_neutral_superpackage(package, neutral_superpackages):
+  elif has_neutral_superpackage(package, neutral_superpackage_re):
     return 0
   else:
     return -1
 
-def get_jar_score(jar, universal_packages, neutral_superpackages):
-  return sum(get_package_score(package, universal_packages, neutral_superpackages) * len(classes) for (package, classes) in jar.items())
+def get_jar_score(jar, universal_packages, neutral_superpackage_re):
+  return sum(get_package_score(package, universal_packages, neutral_superpackage_re) * len(classes) for (package, classes) in jar.items())
 
 def drop_redundant_candidates(package, candidate_scores):
   if len(candidate_scores) == 1:
@@ -85,9 +95,11 @@ def pick_best_jars(package, candidates):
   # Packages defined by every candidate -- 99% certainly part of the same product.
   universal_packages = set.intersection(*(set(index.keys()) for (c, index) in candidates))
   # Superpackages of the universal packages -- their children are maybe part of the same product; neither rewarded nor punished.
-  neutral_superpackages = set.union(*(set(get_neutral_superpackages(package)) for package in universal_packages))
+  neutral_superpackages = map(get_neutral_superpackage, universal_packages)
+  neutral_superpackages = set(nsp for nsp in neutral_superpackages if nsp is not None)
+  neutral_superpackage_re = re.compile("^(" + "|".join(neutral_superpackages) + ")/")
 
-  candidate_scores = [(c, index, get_jar_score(index, universal_packages, neutral_superpackages)) for (c, index) in candidates]
+  candidate_scores = [(c, index, get_jar_score(index, universal_packages, neutral_superpackage_re)) for (c, index) in candidates]
 
   if verbose:
     print("**", package, file = sys.stderr)
