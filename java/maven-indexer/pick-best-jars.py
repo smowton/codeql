@@ -122,7 +122,9 @@ def _pick_best_jars(args):
 
 if __name__ == '__main__':
 
-  verbose = len(sys.argv) >= 3 and sys.argv[2] == "--verbose"
+  verbose = any(a == "--verbose" for a in sys.argv)
+  max_workers_arg = [a for a in sys.argv if a.startswith("-j")]
+  max_workers = int(max_workers_arg[-1][2:]) if len(max_workers_arg) > 0 else None
 
   try:
     with open(sys.argv[2] + ".input", "r") as f:
@@ -165,7 +167,7 @@ if __name__ == '__main__':
 
   spawn_mp_context = multiprocessing.get_context('spawn')
 
-  with concurrent.futures.ProcessPoolExecutor(mp_context = spawn_mp_context) as executor:
+  with concurrent.futures.ProcessPoolExecutor(mp_context = spawn_mp_context, max_workers = max_workers) as executor:
     loaded_jars = executor.map(read_jar_index, needed_jars)
 
   jar_indices = dict(zip(needed_jars, loaded_jars))
