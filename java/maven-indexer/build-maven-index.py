@@ -173,37 +173,35 @@ def get_index_config(url, localpath):
 index_fetches = [(url, local_path + ".index") for (url, local_path) in jars_to_fetch]
 n_to_fetch, errors = write_curl_config(curl_config, index_fetches, get_index_config)
 
-last_fetch_timestamp = os.path.join(workingdir, "last-fetch.timestamp")
-
 if len(errors) > 0:
   print("Skipping fetching %d jar indices" % len(errors), file = sys.stderr)
 if n_to_fetch > 0:
   print("Fetching %d jar indices" % n_to_fetch)
   subprocess.check_call(["curl", "-Z", "-K", curl_config])
-  # 'touch' the timestamp file indicating when the last index was updated.
-  with open(last_fetch_timestamp, "w") as f:
-    pass
 else:
   print("Index fetches: all up to date")
-
-### All HTTP fetching complete -- now use make again for the last few stages: inverting the index, and selecting preferred packages.
 
 all_indices_file = os.path.join(workingdir, "all-indices.txt")
 indices_not_fetched = set(local_path for (url, local_path) in errors)
 
-with open(all_indices_file, "w") as f:
-  for (url, local_path) in index_fetches:
-    if local_path not in indices_not_fetched:
-      f.write(local_path + "\n")
+if n_to_fetch > 0 or not os.path.exists(all_indices_file):
+  with open(all_indices_file, "w") as f:
+    for (url, local_path) in index_fetches:
+      if local_path not in indices_not_fetched:
+        f.write(local_path + "\n")
+
+### All HTTP fetching complete -- now use make again for the last few stages: inverting the index, and selecting preferred packages.
 
 inverted_index_file = os.path.join(workingdir, "inverted-index.txt")
 package_index_file = os.path.join(workingdir, "package-preferred-jars.txt")
+package_index_urls_file = os.path.join(workingdir, "package-preferred-jar-urls.txt")
 
 invert_index_script = os.path.join(script_dir, "invert-package-index.py")
 pick_jars_script = os.path.join(script_dir, "pick-best-jars.py")
 
 with open(makefile, "w") as f:
-  f.write("%s: %s\n\tpython %s %s %s\n\n" % (inverted_index_file, last_fetch_timestamp, invert_index_script, all_indices_file, inverted_index_file))
+  f.write("%s: %s\n\tpython %s %s %s\n\n" % (inverted_index_file, all_indices_file, invert_index_script, all_indices_file, inverted_index_file))
   f.write("%s: %s\n\tpython %s %s %s\n\n" % (package_index_file, inverted_index_file, pick_jars_script, inverted_index_file, package_index_file))
+  f.write("%s: %s\n\tsed -E 's@([,=])%s@\\1%s@g' < %s > %s" % (package_index_urls_file, package_index_file, jar_indices_dir, rooturl, package_index_file, package_index_urls_file))
 
-subprocess.check_call(["make", "-C", workingdir, "-f", makefile, package_index_file])
+subprocess.check_call(["make", "-C", workingdir, "-f", makefile, package_index_urls_file])
