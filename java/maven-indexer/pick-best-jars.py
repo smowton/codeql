@@ -195,6 +195,6 @@ if __name__ == '__main__':
       else:
         # output_jars = complex_package_results[bits[0]]
         output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]])
-        print("%s=%s" % (packagename, ",".join(j[:-6] for j in output_jars)), file = outf)
+        print("%s=%s" % (packagename, " ".join(j[:-6] for j in output_jars)), file = outf)
 
   shutil.copy(sys.argv[1], sys.argv[2] + ".input")
