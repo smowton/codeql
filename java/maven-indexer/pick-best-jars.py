@@ -172,16 +172,7 @@ if __name__ == '__main__':
 
   jar_indices = dict(zip(needed_jars, loaded_jars))
 
-  # complex_package_tasks = [(packagename, [(j, jar_indices[j]) for j in jars]) for (packagename, jars) in packages_to_compute]
-
-  # Ensure the big global index isn't pickled and sent to worker processes:
-  # jar_indices = None
-
   print("Computing results for %d packages" % len(packages_to_compute), file = sys.stderr)
-  # with concurrent.futures.ProcessPoolExecutor(mp_context = spawn_mp_context) as executor:
-  # complex_package_results = executor.map(_pick_best_jars, complex_package_tasks, chunksize = 1000)
-
-  # complex_package_results = dict(zip(packages_to_compute, complex_package_results))
 
   with open(sys.argv[1], "r") as f, open(sys.argv[2], "w") as outf:
     for (i, l) in enumerate(f):
@@ -193,7 +184,6 @@ if __name__ == '__main__':
       elif should_reuse_result(packagename, l):
         print(oldresults[packagename], file = outf)
       else:
-        # output_jars = complex_package_results[bits[0]]
         output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]])
         print("%s=%s" % (packagename, " ".join(j[:-6] for j in output_jars)), file = outf)
 
