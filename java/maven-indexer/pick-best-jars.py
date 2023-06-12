@@ -71,8 +71,18 @@ def get_package_score(package, universal_packages, neutral_superpackage_re):
   else:
     return -1
 
-def get_jar_score(jar, universal_packages, neutral_superpackage_re):
-  return sum(get_package_score(package, universal_packages, neutral_superpackage_re) * len(classes) for (package, classes) in jar.items())
+def get_jar_score(jarname, jar, universal_packages, neutral_superpackage_re, verbose):
+  result = 0
+  for (package, classes) in jar.items():
+    package_score = get_package_score(package, universal_packages, neutral_superpackage_re)
+    nclasses = len(classes)
+    total_score = package_score * nclasses
+    if verbose:
+      print("  %s: score %d * %d classes = %d" % (package, package_score, nclasses, total_score), file = sys.stderr)
+    result += total_score
+  if verbose:
+    print("Total for JAR %s: %d" % (jarname, result), file = sys.stderr)
+  return result
 
 def drop_redundant_candidates(package, candidate_scores):
   if len(candidate_scores) == 1:
@@ -89,7 +99,7 @@ def drop_redundant_candidates(package, candidate_scores):
 
   return result
 
-def pick_best_jars(package, candidates):
+def pick_best_jars(package, candidates, verbose):
   best_jar = None
 
   # Packages defined by every candidate -- 99% certainly part of the same product.
@@ -99,11 +109,7 @@ def pick_best_jars(package, candidates):
   neutral_superpackages = set(nsp for nsp in neutral_superpackages if nsp is not None)
   neutral_superpackage_re = re.compile("^(" + "|".join(neutral_superpackages) + ")/")
 
-  candidate_scores = [(c, index, get_jar_score(index, universal_packages, neutral_superpackage_re)) for (c, index) in candidates]
-
-  if verbose:
-    print("**", package, file = sys.stderr)
-    print("\n".join("%s: %d" % (os.path.basename(jar), score) for (jar, index, score) in candidate_scores), file = sys.stderr)
+  candidate_scores = [(c, index, get_jar_score(c, index, universal_packages, neutral_superpackage_re, verbose)) for (c, index) in candidates]
 
   # Drop candidates with a negative score, unless there is no positive-scoring candidate:
   if any(cis[2] > 0 for cis in candidate_scores):
@@ -125,6 +131,10 @@ if __name__ == '__main__':
   verbose = any(a == "--verbose" for a in sys.argv)
   max_workers_arg = [a for a in sys.argv if a.startswith("-j")]
   max_workers = int(max_workers_arg[-1][2:]) if len(max_workers_arg) > 0 else None
+  explain_arg = [a for a in sys.argv if a.startswith("--explain=")]
+  explain_packages = [a[len("--explain="):] for a in explain_arg]
+  if len(explain_packages) != 0:
+    verbose = True
 
   try:
     with open(sys.argv[2] + ".input", "r") as f:
@@ -147,6 +157,11 @@ if __name__ == '__main__':
       oldjars = None
       oldresults = None
 
+  if len(explain_packages) != 0:
+    # To explain a choice, we need to see the original jar contents and evaluate the package choice anew.
+    oldjars = None
+    oldresults = None
+
   def should_reuse_result(packagename, inputline):
     return oldjars is not None and oldjars.get(packagename, None) == inputline and oldresults is not None and packagename in oldresults
 
@@ -157,6 +172,8 @@ if __name__ == '__main__':
     for (i, l) in enumerate(f):
       l = l.strip()
       bits = l.split()
+      if len(explain_packages) != 0 and bits[0] not in explain_packages:
+        continue
       if bits[1] != "1" and not should_reuse_result(bits[0], l):
         for jar in bits[2:]:
           needed_jars.add(jar)
@@ -174,11 +191,17 @@ if __name__ == '__main__':
 
   print("Computing results for %d packages" % len(packages_to_compute), file = sys.stderr)
 
-  with open(sys.argv[1], "r") as f, open(sys.argv[2], "w") as outf:
+  # If we're running to explain a jar choice, don't write ordinary output.
+  target_file = sys.argv[2] if len(explain_packages) == 0 else "/dev/null"
+
+  with open(sys.argv[1], "r") as f, open(target_file, "w") as outf:
     for (i, l) in enumerate(f):
       l = l.strip()
       bits = l.split()
       packagename = bits[0]
+
+      if len(explain_packages) != 0 and packagename not in explain_packages:
+        continue
 
       # Referencing an overly general package, such as com/, shouldn't trigger using any jar, even if someone declares a class like `com.MyClass`.
       if prefix_too_general(packagename.split("/")):
@@ -189,7 +212,7 @@ if __name__ == '__main__':
       elif should_reuse_result(packagename, l):
         print(oldresults[packagename], file = outf)
       else:
-        output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]])
+        output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]], verbose)
         print("%s=%s" % (packagename, " ".join(j[:-6] for j in output_jars)), file = outf)
 
   shutil.copy(sys.argv[1], sys.argv[2] + ".input")
