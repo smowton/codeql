@@ -202,6 +202,6 @@ pick_jars_script = os.path.join(script_dir, "pick-best-jars.py")
 with open(makefile, "w") as f:
   f.write("%s: %s\n\tpython %s %s %s\n\n" % (inverted_index_file, all_indices_file, invert_index_script, all_indices_file, inverted_index_file))
   f.write("%s: %s\n\tpython %s %s %s\n\n" % (package_index_file, inverted_index_file, pick_jars_script, inverted_index_file, package_index_file))
-  f.write("%s: %s\n\techo '%s' > %s\n\tsed -E 's@([,=])%s@\\1@g' < %s >> %s" % (package_index_file_with_header, package_index_file, rooturl, package_index_file_with_header, jar_indices_dir, package_index_file, package_index_file_with_header))
+  f.write("%s: %s\n\techo '%s' > %s\n\tsed -E 's@([ =])%s@\\1@g' < %s >> %s" % (package_index_file_with_header, package_index_file, rooturl, package_index_file_with_header, jar_indices_dir, package_index_file, package_index_file_with_header))
 
 subprocess.check_call(["make", "-C", workingdir, "-f", makefile, package_index_file_with_header])
