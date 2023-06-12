@@ -179,6 +179,11 @@ if __name__ == '__main__':
       l = l.strip()
       bits = l.split()
       packagename = bits[0]
+
+      # Referencing an overly general package, such as com/, shouldn't trigger using any jar, even if someone declares a class like `com.MyClass`.
+      if prefix_too_general(packagename.split("/")):
+        continue
+
       if bits[1] == "1":
         print("%s=%s" % (packagename, bits[2][:-6]), file = outf)
       elif should_reuse_result(packagename, l):
