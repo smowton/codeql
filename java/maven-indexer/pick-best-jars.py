@@ -84,7 +84,7 @@ def get_jar_score(jarname, jar, universal_packages, neutral_superpackage_re, ver
     print("Total for JAR %s: %d" % (jarname, result), file = sys.stderr)
   return result
 
-def drop_redundant_candidates(package, candidate_scores):
+def drop_redundant_candidates(package, candidate_scores, verbose):
   if len(candidate_scores) == 1:
     return [candidate_scores[0][0]]
 
@@ -93,9 +93,13 @@ def drop_redundant_candidates(package, candidate_scores):
   
   for cis in candidate_scores:
     lenbefore = len(already_provided)
+    if verbose:
+      provided_before = set(already_provided)
     already_provided.update(cis[1].get(package, []))
     if lenbefore != len(already_provided):
       result.append(cis[0])
+      if verbose and lenbefore != 0:
+        print("Jar %s provides additional classes: %s" % (result[-1], "".join("\n" + c for c in sorted(already_provided - provided_before))), file = sys.stderr)
 
   return result
 
@@ -119,9 +123,22 @@ def pick_best_jars(package, candidates, verbose):
 
   # Sort best first
   candidate_scores = sorted(candidate_scores, key = lambda cis: cis[2], reverse = True)
+  if verbose:
+    print("RESULTS before redundnancy elimination:", file = sys.stderr)
+    for (candidate, index, score) in candidate_scores:
+      print("%s: %d" % (candidate, score), file = sys.stderr)
 
   # Drop jars that are wholly shadowed by better candidates
-  return drop_redundant_candidates(package, candidate_scores)
+  results = drop_redundant_candidates(package, candidate_scores, verbose)
+  if verbose:
+    def get_score(candidate):
+      return [cis for cis in candidate_scores if cis[0] == candidate][0][2]
+
+    print("RESULTS after redundnancy elimination:", file = sys.stderr)
+    for candidate in results:
+      print("%s: %d" % (candidate, get_score(candidate)), file = sys.stderr)
+
+  return results
 
 def _pick_best_jars(args):
   pick_best_jars(*args)
