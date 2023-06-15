@@ -88,6 +88,13 @@ def get_common_prefix(l1, l2):
     i += 1
   return l1[:i]
 
+def adjust_jar_relative_name(relname):
+  # HACK: treat commons-io/commons-io like org/apache/commons/commons-io, because a real jar with the latter
+  # name exists but only includes older versions of that package.
+  if len(relname) >= 2 and relname[0] == "commons-io" and relname[1] == "commons-io":
+    return ["org", "apache", "commons"] + relname[1:]
+  return relname
+
 def get_jar_score(jarname, jar, target_package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose):
   result = 0
 
@@ -106,6 +113,7 @@ def get_jar_score(jarname, jar, target_package, universal_packages, neutral_supe
   if "../" in jar_relative_name:
     raise Exception("JAR name %s should fall within the repository directory %s" % (jarname, jar_repository_dir))
   jar_relative_name_segments = jar_relative_name.split("/")
+  jar_relative_name_segments = adjust_jar_relative_name(jar_relative_name_segments)
   target_package_segments = target_package.split("/")
   common_prefix = get_common_prefix(jar_relative_name_segments, target_package_segments)
   if not prefix_too_general(common_prefix):
