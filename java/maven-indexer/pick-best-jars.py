@@ -188,6 +188,13 @@ def pick_best_jars(package, candidates, jar_repository_dir, jar_verbose):
 def _pick_best_jars(args):
   pick_best_jars(*args)
 
+def adjust_output_jars(jars):
+  # HACK: manually demote mockito-scala behind other providers.
+  # Otherwise this looks more promising than mockito itself -- popularity information will be the correct answer I think.
+  if any("mockito" in j for j in jars):
+    jars = sorted(jars, key = lambda j: "mockito-scala" in j)
+  return jars
+
 if __name__ == '__main__':
 
   jar_repository_dir = sys.argv[1]
@@ -279,6 +286,7 @@ if __name__ == '__main__':
         print(oldresults[packagename], file = outf)
       else:
         output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]], jar_repository_dir, verbose)
+        output_jars = adjust_output_jars(output_jars)
         print("%s=%s" % (packagename, " ".join(j[:-6] for j in output_jars)), file = outf)
 
   if len(explain_packages) == 0:
