@@ -11,7 +11,12 @@ private newtype TNode =
   MkSsaNode(SsaDefinition ssa) or
   MkGlobalFunctionNode(Function f) or
   MkImplicitVarargsSlice(CallExpr c) { c.hasImplicitVarargs() } or
-  MkFlowSummaryNode(FlowSummaryImpl::Private::SummaryNode sn)
+  MkFlowSummaryNode(FlowSummaryImpl::Private::SummaryNode sn) or
+  MkPUN(Expr e) { e = updatedExpr() }
+
+private Expr updatedExpr() {
+  result instanceof AddressExpr or result = any(AddressExpr e).getOperand() or /* ... */ none()
+}
 
 /** Nodes intended for only use inside the data-flow libraries. */
 module Private {
@@ -753,35 +758,27 @@ module Public {
     abstract Node getPreUpdateNode();
   }
 
-  private class DefaultPostUpdateNode extends PostUpdateNode {
-    Node preupd;
+  private class UpdatedNode extends ExprNode {
+    UpdatedNode() {
+      this.asExpr() = updatedExpr()
+    }
+  }
+
+  class DefaultPostUpdateNode extends PostUpdateNode {
+    UpdatedNode preupd;
 
     DefaultPostUpdateNode() {
-      (
-        preupd instanceof AddressOperationNode
-        or
-        preupd = any(AddressOperationNode addr).getOperand()
-        or
-        preupd = any(PointerDereferenceNode deref).getOperand()
-        or
-        preupd = getAWrittenNode()
-        or
-        (
-          preupd instanceof ArgumentNode and not preupd instanceof ImplicitVarargsSlice
-          or
-          preupd = any(CallNode c).getAnImplicitVarargsArgument()
-        ) and
-        mutableType(preupd.getType())
-      ) and
-      (
-        preupd = this.(SsaNode).getAUse()
-        or
-        preupd = this and
-        not basicLocalFlowStep(_, this)
-      )
+      this = MkPUN(preupd.asExpr())
     }
 
     override Node getPreUpdateNode() { result = preupd }
+
+    Node getSuccessor() {
+      preupd = result.(SsaNode).getAUse()
+      or
+      preupd = result and
+      not basicLocalFlowStep(_, preupd)
+    }
   }
 
   /**

@@ -87,6 +87,9 @@ predicate basicLocalFlowStep(Node nodeFrom, Node nodeTo) {
   // GlobalFunctionNode -> use
   nodeFrom =
     any(GlobalFunctionNode fn | fn.getFunction() = nodeTo.asExpr().(FunctionName).getTarget())
+  or
+  // post-update node -> successor
+  nodeTo = nodeFrom.(DefaultPostUpdateNode).getSuccessor()
 }
 
 pragma[noinline]
