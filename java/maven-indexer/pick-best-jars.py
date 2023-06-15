@@ -13,6 +13,8 @@ import shutil
 import multiprocessing
 import concurrent.futures
 
+common_prefix_score_bonus = 20
+
 def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
@@ -51,7 +53,7 @@ overly_general_package_prefixes = set([
 ])
 
 def prefix_too_general(prefix):
-  if len(prefix) == 1 and len(prefix[0]) <= 4: # Reject very short prefixes like org/, com/, uk/ and so on.
+  if len(prefix) == 0 or (len(prefix) == 1 and len(prefix[0]) <= 4): # Reject very short prefixes like org/, com/, uk/ and so on.
     return True
   return tuple(prefix) in overly_general_package_prefixes
 
@@ -78,8 +80,19 @@ def get_package_score(package, universal_packages, neutral_superpackage_re):
   else:
     return -1
 
-def get_jar_score(jarname, jar, universal_packages, neutral_superpackage_re, verbose):
+def get_common_prefix(l1, l2):
+  i = 0
+  for (seg1, seg2) in zip(l1, l2):
+    if seg1 != seg2:
+      break
+    i += 1
+  return l1[:i]
+
+def get_jar_score(jarname, jar, target_package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose):
   result = 0
+
+  # Score jar for the packages it provides -- positively for those clearly related to the target 'package',
+  # negatively for those very likely unrelated, and neturally for ambiguous sibling packages.
   for (package, classes) in jar.items():
     package_score = get_package_score(package, universal_packages, neutral_superpackage_re)
     nclasses = len(classes)
@@ -87,6 +100,19 @@ def get_jar_score(jarname, jar, universal_packages, neutral_superpackage_re, ver
     if verbose:
       print("  %s: score %d * %d classes = %d" % (package, package_score, nclasses, total_score), file = sys.stderr)
     result += total_score
+
+  # Add a boost to the score if the jar's name substantially matches the package we're looking to provide.
+  jar_relative_name = os.path.relpath(jarname, jar_repository_dir)
+  if "../" in jar_relative_name:
+    raise Exception("JAR name %s should fall within the repository directory %s" % (jarname, jar_repository_dir))
+  jar_relative_name_segments = jar_relative_name.split("/")
+  target_package_segments = target_package.split("/")
+  common_prefix = get_common_prefix(jar_relative_name_segments, target_package_segments)
+  if not prefix_too_general(common_prefix):
+    if verbose:
+      print("BONUS: %d points because the jar name and target package %s have common prefix %s" % (common_prefix_score_bonus, target_package, "/".join(common_prefix)), file = sys.stderr)
+    result += common_prefix_score_bonus
+
   if verbose:
     print("Total for JAR %s: %d" % (jarname, result), file = sys.stderr)
   return result
@@ -110,7 +136,7 @@ def drop_redundant_candidates(package, candidate_scores, verbose):
 
   return result
 
-def pick_best_jars(package, candidates, verbose):
+def pick_best_jars(package, candidates, jar_repository_dir, jar_verbose):
   best_jar = None
 
   # Packages defined by every candidate -- 99% certainly part of the same product.
@@ -120,7 +146,7 @@ def pick_best_jars(package, candidates, verbose):
   neutral_superpackages = set(nsp for nsp in neutral_superpackages if nsp is not None)
   neutral_superpackage_re = re.compile("^(" + "|".join(neutral_superpackages) + ")/")
 
-  candidate_scores = [(c, index, get_jar_score(c, index, universal_packages, neutral_superpackage_re, verbose)) for (c, index) in candidates]
+  candidate_scores = [(c, index, get_jar_score(c, index, package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose)) for (c, index) in candidates]
 
   # Drop candidates with a negative score, unless there is no positive-scoring candidate:
   if any(cis[2] > 0 for cis in candidate_scores):
@@ -156,6 +182,10 @@ def _pick_best_jars(args):
 
 if __name__ == '__main__':
 
+  jar_repository_dir = sys.argv[1]
+  input_file = sys.argv[2]
+  output_file = sys.argv[3]
+
   verbose = any(a == "--verbose" for a in sys.argv)
   max_workers_arg = [a for a in sys.argv if a.startswith("-j")]
   max_workers = int(max_workers_arg[-1][2:]) if len(max_workers_arg) > 0 else None
@@ -165,7 +195,7 @@ if __name__ == '__main__':
     verbose = True
 
   try:
-    with open(sys.argv[2] + ".input", "r") as f:
+    with open(output_file + ".input", "r") as f:
       oldjars = dict()
       for l in f:
         packagename = l.split()[0]
@@ -176,7 +206,7 @@ if __name__ == '__main__':
   if oldjars is not None:
     try:
       oldresults = dict()
-      with open(sys.argv[2], "r") as f:
+      with open(output_file, "r") as f:
         for l in f:
           l = l.strip()
           packagename = l.split("=")[0]
@@ -196,7 +226,7 @@ if __name__ == '__main__':
   needed_jars = set()
   packages_to_compute = []
 
-  with open(sys.argv[1], "r") as f:
+  with open(input_file, "r") as f:
     for (i, l) in enumerate(f):
       l = l.strip()
       bits = l.split()
@@ -220,9 +250,9 @@ if __name__ == '__main__':
   print("Computing results for %d packages" % len(packages_to_compute), file = sys.stderr)
 
   # If we're running to explain a jar choice, don't write ordinary output.
-  target_file = sys.argv[2] if len(explain_packages) == 0 else "/dev/null"
+  target_file = output_file if len(explain_packages) == 0 else "/dev/null"
 
-  with open(sys.argv[1], "r") as f, open(target_file, "w") as outf:
+  with open(input_file, "r") as f, open(target_file, "w") as outf:
     for (i, l) in enumerate(f):
       l = l.strip()
       bits = l.split()
@@ -240,7 +270,8 @@ if __name__ == '__main__':
       elif should_reuse_result(packagename, l):
         print(oldresults[packagename], file = outf)
       else:
-        output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]], verbose)
+        output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]], jar_repository_dir, verbose)
         print("%s=%s" % (packagename, " ".join(j[:-6] for j in output_jars)), file = outf)
 
-  shutil.copy(sys.argv[1], sys.argv[2] + ".input")
+  if len(explain_packages) == 0:
+    shutil.copy(input_file, output_file + ".input")
