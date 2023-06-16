@@ -23,7 +23,19 @@ def version_to_tuple(v):
         v = v[skip:]
     if len(v) != 0:
         result.append(v)
-    return result
+    return adjust_version_tuple(result)
+
+prerelease_re = re.compile("alpha|beta|rc", re.IGNORECASE)
+
+def looks_like_prerelease(s):
+    return prerelease_re.search(s) is not None
+
+def adjust_version_tuple(vt):
+    if type(vt[-1]) is str and type(vt[0]) is int and looks_like_prerelease(vt[-1]):
+        # Demote prereleases one major version, so e.g. we will prefer 1.5.6 to 2.0.0-beta4
+        return [vt[0] - 1] + vt[1:]
+    else:
+        return vt
 
 def element(v, n):
     return v[n] if n < len(v) else None
