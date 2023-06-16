@@ -12,6 +12,7 @@ import listzip
 import shutil
 import multiprocessing
 import concurrent.futures
+import utils
 
 common_prefix_score_bonus = 20
 
@@ -19,19 +20,12 @@ def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
-private_class_regex = re.compile(".*\\$[0-9]+\\.class$")
-
-def is_private(classfile):
-  # Since we only have the index, not the class file headers, we have to underapproximate private classes.
-  # Here the best we can currently do is recognise anonymous classes like MyClass$1.class.
-  return private_class_regex.match(classfile) is not None
-
 def _read_jar_index(jarname):
   bypackage = dict()
   cd_file = jarname[:-6] + ".cd"
   zip_suffix = read_bytes(jarname) + read_bytes(cd_file)
   for l in listzip.listzip(zip_suffix):
-    if l.endswith(".class") and not is_private(l):
+    if l.endswith(".class") and not utils.is_private(l):
       lpackage = os.path.dirname(l)
       cname = os.path.basename(l)
       if lpackage not in bypackage:

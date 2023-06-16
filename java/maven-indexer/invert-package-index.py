@@ -4,12 +4,13 @@ import shutil
 import sys
 
 import listzip
+import utils
 
 index = dict()
 
 def add_index(fname, index_bytes):
   for l in listzip.listzip(index_bytes):
-    if l.endswith(".class"):
+    if l.endswith(".class") and not utils.is_private(l):
       package = os.path.dirname(l)
       if package == "" or package.startswith("META-INF") or package.startswith("BOOT-INF") or " " in package:
          continue
