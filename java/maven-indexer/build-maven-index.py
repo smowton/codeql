@@ -36,7 +36,7 @@ makefile = os.path.join(workingdir, "Makefile")
 with open(makefile, "w") as f:
   f.write("all: jars-to-index.txt\n\n")
   f.write("indexer-cli-5.1.1.jar:\n\tcurl -L -O https://repo.maven.apache.org/maven2/org/apache/maven/indexer/indexer-cli/5.1.1/indexer-cli-5.1.1.jar\n\n")
-  f.write("maven-index.gz:\n\tcurl -L -o maven-index.gz %s\n\n" % indexurl)
+  f.write("nexus-maven-repository-index.gz:\n\tcurl -L -o nexus-maven-repository-index.gz %s\n\n" % indexurl)
   f.write("maven-index-unpacked: nexus-maven-repository-index.gz indexer-cli-5.1.1.jar\n\tjava -jar indexer-cli-5.1.1.jar --unpack nexus-maven-repository-index.gz --destination maven-index-unpacked --type full\n\n")
   f.write("jars-to-index.txt: maven-index-unpacked\n\t%s maven-index-unpacked | python %s > jars-to-index.txt\n\n" % (index_reader_script, pick_versions_script))
 
