@@ -89,6 +89,15 @@ def adjust_jar_relative_name(relname):
     return ["org", "apache", "commons"] + relname[1:]
   return relname
 
+hamcrest_jar_re = re.compile(".*/hamcrest-[0-9.]*\\.jar.index$")
+
+def adjust_jar_score(jarname, target_package):
+  # HACK: prefer hamcrest to hamcrest-all because the former is a renamed version of the latter and adds new matchers while deprecating a couple of classes, making it appear like a worse choice.
+  if hamcrest_jar_re.match(jarname) is not None and target_package == "org/hamcrest":
+    return 20
+  else:
+    return 0
+
 def get_jar_score(jarname, jar, target_package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose):
   result = 0
 
@@ -114,6 +123,8 @@ def get_jar_score(jarname, jar, target_package, universal_packages, neutral_supe
     if verbose:
       print("BONUS: %d points because the jar name and target package %s have common prefix %s" % (common_prefix_score_bonus, target_package, "/".join(common_prefix)), file = sys.stderr)
     result += common_prefix_score_bonus
+
+  result += adjust_jar_score(jarname, target_package)
 
   if verbose:
     print("Total for JAR %s: %d" % (jarname, result), file = sys.stderr)
