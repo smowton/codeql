@@ -85,8 +85,11 @@ def get_common_prefix(l1, l2):
 def adjust_jar_relative_name(relname):
   # HACK: treat commons-io/commons-io like org/apache/commons/commons-io, because a real jar with the latter
   # name exists but only includes older versions of that package.
+  # Also treat org/projectlombok as the authoritative provider of the package 'lombok'.
   if len(relname) >= 2 and relname[0] == "commons-io" and relname[1] == "commons-io":
     return ["org", "apache", "commons"] + relname[1:]
+  if len(relname) >= 2 and relname[0] == "org" and relname[1] == "projectlombok":
+    return ["lombok"] + relname[2:]
   return relname
 
 hamcrest_jar_re = re.compile(".*/hamcrest-[0-9.]*\\.jar.index$")
