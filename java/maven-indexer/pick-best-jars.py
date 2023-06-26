@@ -13,6 +13,8 @@ import shutil
 import multiprocessing
 import concurrent.futures
 import utils
+import email.utils
+import collections
 
 common_prefix_score_bonus = 20
 
@@ -38,6 +40,19 @@ def read_jar_index(jarname):
     return _read_jar_index(jarname)
   except Exception as e:
     raise Exception("Failed to read " + jarname) from e
+
+last_modified_header = "last-modified: "
+
+def read_jar_age(jarname):
+  headersname = jarname[:-6] + ".headers"
+  with open(headersname, "r") as f:
+    for l in f:
+      if l.lower().startswith(last_modified_header):
+        return email.utils.parsedate_to_datetime(l[len(last_modified_header):])
+  return None
+
+def read_jar_data(jarname):
+  return (read_jar_index(jarname), read_jar_age(jarname))
 
 # A list of known package prefixes that are too general to use as a heuristic for sharing a common product:
 # (very short prefixes like "org" are excluded already):
@@ -140,52 +155,93 @@ def drop_redundant_candidates(package, candidate_scores, verbose):
   result = []
   already_provided = set()
   
-  for cis in candidate_scores:
+  for cisa in candidate_scores:
     lenbefore = len(already_provided)
     if verbose:
       provided_before = set(already_provided)
-    already_provided.update(cis[1].get(package, []))
+    already_provided.update(cisa[1].get(package, []))
     if lenbefore != len(already_provided):
-      result.append(cis[0])
+      result.append(cisa[0])
       if verbose and lenbefore != 0:
         print("Jar %s provides additional classes: %s" % (result[-1], "".join("\n" + c for c in sorted(already_provided - provided_before))), file = sys.stderr)
 
   return result
 
+def get_groupid(jarname):
+  # Find ^/^ in the context /root/groupid0/groupid1/.../groupidN^/^artifactid/version/jarname.jar.index
+  slashidx = jarname.rindex('/')
+  slashidx = jarname.rindex('/', 0, slashidx)
+  slashidx = jarname.rindex('/', 0, slashidx)
+  return jarname[:slashidx]
+
+one_year_in_seconds = 365 * 24 * 60 * 60
+
+def apply_age_penalty(candidate_scores, verbose):
+
+  # When more than one candidate has the same groupId, apply a multiplicative penalty to artifacts that have been updated less recently.
+  # This is intended to distinguish when an artifact has been renamed, so the older version should be deprioritised even if it provides more classes in a given package.
+  # Note the adjustment is multiplicative so that positive scores stay positive, and restricted to the same groupId so that someone republishing an old artifact
+  # doesn't get prioritised automatically over the 'real' author.
+
+  by_groupid = collections.defaultdict(list)
+  for cisa in candidate_scores:
+    by_groupid[get_groupid(cisa[0])].append(cisa)
+
+  candidate_penalties = dict()
+
+  for (groupid, cisas) in by_groupid.items():
+    if len(cisas) >= 2:
+      newest_cisa = max(cisas, key = lambda cisa: cisa[3])
+      for cisa in cisas:
+        if cisa != newest_cisa:
+          age_difference = newest_cisa[3] - cisa[3]
+          # Penalty scales linearly from 50% at 5+ years older, to nothing at 1 year older.
+          age_penalty = ((age_difference.total_seconds() - one_year_in_seconds) / one_year_in_seconds) * (0.5 / 4)
+          age_penalty = min(age_penalty, 0.9)
+          age_penalty = max(age_penalty, 0.0)
+          if age_penalty > 0:
+            if verbose:
+              print("Applying age penalty of %.2f to candidate %s" % (age_penalty, cisa[0]), file = sys.stderr)
+            candidate_penalties[cisa[0]] = age_penalty
+
+  return [(candidate, index, score * (1 - candidate_penalties.get(candidate, 0)), age) for (candidate, index, score, age) in candidate_scores]
+
 def pick_best_jars(package, candidates, jar_repository_dir, jar_verbose):
   best_jar = None
 
   # Packages defined by every candidate -- 99% certainly part of the same product.
-  universal_packages = set.intersection(*(set(index.keys()) for (c, index) in candidates))
+  universal_packages = set.intersection(*(set(index.keys()) for (c, (index, age)) in candidates))
   # Superpackages of the universal packages -- their children are maybe part of the same product; neither rewarded nor punished.
   neutral_superpackages = map(get_neutral_superpackage, universal_packages)
   neutral_superpackages = set(nsp for nsp in neutral_superpackages if nsp is not None)
   neutral_superpackage_re = re.compile("^(" + "|".join(neutral_superpackages) + ")/")
 
-  candidate_scores = [(c, index, get_jar_score(c, index, package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose)) for (c, index) in candidates]
+  candidate_scores = [(c, index, get_jar_score(c, index, package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose), age) for (c, (index, age)) in candidates]
 
   # Drop candidates with a negative score, unless there is no positive-scoring candidate:
-  if any(cis[2] > 0 for cis in candidate_scores):
-    candidate_scores = [cis for cis in candidate_scores if cis[2] >= 0]
+  if any(cisa[2] > 0 for cisa in candidate_scores):
+    candidate_scores = [cisa for cisa in candidate_scores if cisa[2] >= 0]
   else:
-    candidate_scores = [max(candidate_scores, key = lambda cis: cis[2])]
+    candidate_scores = [max(candidate_scores, key = lambda cisa: cisa[2])]
 
-  def best_first_key(cis):
+  candidate_scores = apply_age_penalty(candidate_scores, jar_verbose)
+
+  def best_first_key(cisa):
     # Sort non-tests jars first, and then sort by score.
-    return (not cis[0].endswith("-tests.jar.index"), cis[2])
+    return (not cisa[0].endswith("-tests.jar.index"), cisa[2])
 
   # Sort best first
   candidate_scores = sorted(candidate_scores, key = best_first_key, reverse = True)
   if verbose:
     print("RESULTS before redundnancy elimination:", file = sys.stderr)
-    for (candidate, index, score) in candidate_scores:
+    for (candidate, index, score, age) in candidate_scores:
       print("%s: %d" % (candidate, score), file = sys.stderr)
 
   # Drop jars that are wholly shadowed by better candidates
   results = drop_redundant_candidates(package, candidate_scores, verbose)
   if verbose:
     def get_score(candidate):
-      return [cis for cis in candidate_scores if cis[0] == candidate][0][2]
+      return [cisa for cisa in candidate_scores if cisa[0] == candidate][0][2]
 
     print("RESULTS after redundnancy elimination:", file = sys.stderr)
     for candidate in results:
@@ -266,9 +322,9 @@ if __name__ == '__main__':
   spawn_mp_context = multiprocessing.get_context('spawn')
 
   with concurrent.futures.ProcessPoolExecutor(mp_context = spawn_mp_context, max_workers = max_workers) as executor:
-    loaded_jars = executor.map(read_jar_index, needed_jars)
+    loaded_jars = executor.map(read_jar_data, needed_jars)
 
-  jar_indices = dict(zip(needed_jars, loaded_jars))
+  jar_data = dict(zip(needed_jars, loaded_jars))
 
   print("Computing results for %d packages" % len(packages_to_compute), file = sys.stderr)
 
@@ -293,7 +349,7 @@ if __name__ == '__main__':
       elif should_reuse_result(packagename, l):
         print(oldresults[packagename], file = outf)
       else:
-        output_jars = pick_best_jars(packagename, [(j, jar_indices[j]) for j in bits[2:]], jar_repository_dir, verbose)
+        output_jars = pick_best_jars(packagename, [(j, jar_data[j]) for j in bits[2:]], jar_repository_dir, verbose)
         output_jars = adjust_output_jars(output_jars)
         print("%s=%s" % (packagename, " ".join(j[:-6] for j in output_jars)), file = outf)
 
