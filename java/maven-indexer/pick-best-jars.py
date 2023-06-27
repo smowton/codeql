@@ -101,10 +101,13 @@ def adjust_jar_relative_name(relname):
   # HACK: treat commons-io/commons-io like org/apache/commons/commons-io, because a real jar with the latter
   # name exists but only includes older versions of that package.
   # Also treat org/projectlombok as the authoritative provider of the package 'lombok'.
+  # Same for org/junit and junit.
   if len(relname) >= 2 and relname[0] == "commons-io" and relname[1] == "commons-io":
     return ["org", "apache", "commons"] + relname[1:]
   if len(relname) >= 2 and relname[0] == "org" and relname[1] == "projectlombok":
     return ["lombok"] + relname[2:]
+  if len(relname) >= 1 and relname[0] == "junit":
+    return ["org", "junit"] + relname[1:]
   return relname
 
 hamcrest_jar_re = re.compile(".*/hamcrest-[0-9.]*\\.jar.index$")
@@ -206,11 +209,23 @@ def apply_age_penalty(candidate_scores, verbose):
 
   return [(candidate, index, score * (1 - candidate_penalties.get(candidate, 0)), age) for (candidate, index, score, age) in candidate_scores]
 
+junit_package_re = re.compile("^(org/)?junit(/|$)")
+
+def adjust_universal_packages(packagename, universal_packages):
+  # HACK: don't penalise junit for including the package junit/ or org/junit when evaluating the best jar to provide one package or the other.
+  # The solution is probably popularity data considering the package is common.
+  if junit_package_re.match(packagename) is not None:
+    return set.union(universal_packages, set(("junit", "org/junit")))
+  else:
+    return universal_packages
+
 def pick_best_jars(package, candidates, jar_repository_dir, jar_verbose):
   best_jar = None
 
   # Packages defined by every candidate -- 99% certainly part of the same product.
   universal_packages = set.intersection(*(set(index.keys()) for (c, (index, age)) in candidates))
+  universal_packages = adjust_universal_packages(packagename, universal_packages)
+
   # Superpackages of the universal packages -- their children are maybe part of the same product; neither rewarded nor punished.
   neutral_superpackages = map(get_neutral_superpackage, universal_packages)
   neutral_superpackages = set(nsp for nsp in neutral_superpackages if nsp is not None)
