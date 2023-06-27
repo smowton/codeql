@@ -229,7 +229,7 @@ def pick_best_jars(package, candidates, jar_repository_dir, jar_verbose):
   # Superpackages of the universal packages -- their children are maybe part of the same product; neither rewarded nor punished.
   neutral_superpackages = map(get_neutral_superpackage, universal_packages)
   neutral_superpackages = set(nsp for nsp in neutral_superpackages if nsp is not None)
-  neutral_superpackage_re = re.compile("^(" + "|".join(neutral_superpackages) + ")/")
+  neutral_superpackage_re = re.compile("^(" + "|".join(neutral_superpackages) + ")(/|$)")
 
   candidate_scores = [(c, index, get_jar_score(c, index, package, universal_packages, neutral_superpackage_re, jar_repository_dir, verbose), age) for (c, (index, age)) in candidates]
 
