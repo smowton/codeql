@@ -173,16 +173,21 @@ def drop_redundant_candidates(package, candidate_scores, verbose):
 
   return result
 
-def get_groupid(jarname):
-  # Find ^/^ in the context /root/groupid0/groupid1/.../groupidN^/^artifactid/version/jarname.jar.index
-  slashidx = jarname.rindex('/')
-  slashidx = jarname.rindex('/', 0, slashidx)
-  slashidx = jarname.rindex('/', 0, slashidx)
-  return jarname[:slashidx]
+def get_groupid_prefix(jarname, repository_dir):
+  jarname = jarname[len(repository_dir):]
+  if jarname.startswith("/"):
+    jarname = jarname[1:]
+  jarname = jarname.split("/")
+
+  prefix_len = 1
+  while prefix_too_general(jarname[:prefix_len]):
+    prefix_len += 1
+
+  return tuple(jarname[:prefix_len])
 
 one_year_in_seconds = 365 * 24 * 60 * 60
 
-def apply_age_penalty(candidate_scores, verbose):
+def apply_age_penalty(candidate_scores, repository_dir, verbose):
 
   # When more than one candidate has the same groupId, apply a multiplicative penalty to artifacts that have been updated less recently.
   # This is intended to distinguish when an artifact has been renamed, so the older version should be deprioritised even if it provides more classes in a given package.
@@ -191,7 +196,7 @@ def apply_age_penalty(candidate_scores, verbose):
 
   by_groupid = collections.defaultdict(list)
   for cisa in candidate_scores:
-    by_groupid[get_groupid(cisa[0])].append(cisa)
+    by_groupid[get_groupid_prefix(cisa[0], repository_dir)].append(cisa)
 
   candidate_penalties = dict()
 
@@ -242,7 +247,7 @@ def pick_best_jars(package, candidates, jar_repository_dir, jar_verbose):
   else:
     candidate_scores = [max(candidate_scores, key = lambda cisa: cisa[2])]
 
-  candidate_scores = apply_age_penalty(candidate_scores, jar_verbose)
+  candidate_scores = apply_age_penalty(candidate_scores, jar_repository_dir, jar_verbose)
 
   def best_first_key(cisa):
     # Sort non-tests jars first, and then sort by score.
