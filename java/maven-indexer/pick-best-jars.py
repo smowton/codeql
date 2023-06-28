@@ -102,12 +102,15 @@ def adjust_jar_relative_name(relname):
   # name exists but only includes older versions of that package.
   # Also treat org/projectlombok as the authoritative provider of the package 'lombok'.
   # Same for org/junit and junit.
+  # Same for org/ow2 and org/objectweb.
   if len(relname) >= 2 and relname[0] == "commons-io" and relname[1] == "commons-io":
     return ["org", "apache", "commons"] + relname[1:]
   if len(relname) >= 2 and relname[0] == "org" and relname[1] == "projectlombok":
     return ["lombok"] + relname[2:]
   if len(relname) >= 1 and relname[0] == "junit":
     return ["org", "junit"] + relname[1:]
+  if len(relname) >= 2 and relname[0] == "org" and relname[1] == "ow2":
+    return ["org", "objectweb"] + relname[2:]
   return relname
 
 hamcrest_jar_re = re.compile(".*/hamcrest-[0-9.]*\\.jar.index$")
