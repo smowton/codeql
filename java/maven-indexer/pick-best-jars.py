@@ -203,7 +203,7 @@ def apply_age_penalty(candidate_scores, verbose):
           age_difference = newest_cisa[3] - cisa[3]
           # Penalty scales linearly from 50% at 5+ years older, to nothing at 1 year older.
           age_penalty = ((age_difference.total_seconds() - one_year_in_seconds) / one_year_in_seconds) * (0.5 / 4)
-          age_penalty = min(age_penalty, 0.9)
+          age_penalty = min(age_penalty, 0.5)
           age_penalty = max(age_penalty, 0.0)
           if age_penalty > 0:
             if verbose:
