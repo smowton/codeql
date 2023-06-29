@@ -107,6 +107,8 @@ def adjust_jar_relative_name(relname, target_package):
   # Same for org/ow2 and org/objectweb.
   if len(relname) >= 2 and relname[0] == "commons-io" and relname[1] == "commons-io":
     return ["org", "apache", "commons"] + relname[1:]
+  if len(relname) >= 2 and relname[0] == "commons-logging" and relname[1] == "commons-logging":
+    return ["org", "apache", "commons"] + relname[1:]
   if len(relname) >= 2 and relname[0] == "org" and relname[1] == "projectlombok":
     return ["lombok"] + relname[2:]
   if len(relname) >= 1 and relname[0] == "junit" and target_package.startswith("org/junit"):
