@@ -99,7 +99,7 @@ def get_common_prefix(l1, l2):
     i += 1
   return l1[:i]
 
-def adjust_jar_relative_name(relname):
+def adjust_jar_relative_name(relname, target_package):
   # HACK: treat commons-io/commons-io like org/apache/commons/commons-io, because a real jar with the latter
   # name exists but only includes older versions of that package.
   # Also treat org/projectlombok as the authoritative provider of the package 'lombok'.
@@ -109,7 +109,7 @@ def adjust_jar_relative_name(relname):
     return ["org", "apache", "commons"] + relname[1:]
   if len(relname) >= 2 and relname[0] == "org" and relname[1] == "projectlombok":
     return ["lombok"] + relname[2:]
-  if len(relname) >= 1 and relname[0] == "junit":
+  if len(relname) >= 1 and relname[0] == "junit" and target_package.startswith("org/junit"):
     return ["org", "junit"] + relname[1:]
   if len(relname) >= 2 and relname[0] == "org" and relname[1] == "ow2":
     return ["org", "objectweb"] + relname[2:]
@@ -142,7 +142,7 @@ def get_jar_score(jarname, jar, target_package, universal_packages, neutral_supe
   if "../" in jar_relative_name:
     raise Exception("JAR name %s should fall within the repository directory %s" % (jarname, jar_repository_dir))
   jar_relative_name_segments = jar_relative_name.split("/")
-  jar_relative_name_segments = adjust_jar_relative_name(jar_relative_name_segments)
+  jar_relative_name_segments = adjust_jar_relative_name(jar_relative_name_segments, target_package)
   target_package_segments = target_package.split("/")
   common_prefix = get_common_prefix(jar_relative_name_segments, target_package_segments)
   if not prefix_too_general(common_prefix):
