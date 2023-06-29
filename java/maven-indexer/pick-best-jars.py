@@ -57,12 +57,14 @@ def read_jar_data(jarname):
 # A list of known package prefixes that are too general to use as a heuristic for sharing a common product:
 # (very short prefixes like "org" are excluded already):
 overly_general_package_prefixes = set([
+  ("java",),
+  ("javax",),
   ("org", "apache"),
   ("org", "eclipse")
 ])
 
 def prefix_too_general(prefix):
-  if len(prefix) == 0 or (len(prefix) == 1 and len(prefix[0]) <= 4): # Reject very short prefixes like org/, com/, uk/ and so on.
+  if len(prefix) == 0 or (len(prefix) == 1 and len(prefix[0]) <= 3): # Reject very short prefixes like org/, com/, uk/ and so on.
     return True
   return tuple(prefix) in overly_general_package_prefixes
 
