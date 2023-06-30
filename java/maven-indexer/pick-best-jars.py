@@ -64,7 +64,7 @@ overly_general_package_prefixes = set([
 ])
 
 def prefix_too_general(prefix):
-  if len(prefix) == 0 or (len(prefix) == 1 and len(prefix[0]) <= 3): # Reject very short prefixes like org/, com/, uk/ and so on.
+  if len(prefix) == 0 or (len(prefix) == 1 and len(prefix[0]) <= 3 and prefix[0] != "rx"): # Reject very short prefixes like org/, com/, uk/ and so on.
     return True
   return tuple(prefix) in overly_general_package_prefixes
 
