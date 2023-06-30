@@ -16,7 +16,7 @@ import utils
 import email.utils
 import collections
 
-common_prefix_score_bonus = 20
+common_prefix_score_bonus = 50
 
 def read_bytes(fname):
   with open(fname, "rb") as f:
