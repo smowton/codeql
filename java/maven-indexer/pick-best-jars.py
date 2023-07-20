@@ -5,6 +5,7 @@
 # Classes-in-package ascending should favour newer versions of a package (which typically define less classes) and/or selective shades which have picked a few classes to include
 # Classes-out-of-package should exclude jars that have shaded this package in, and/or projects distributed as individual modules as well as an `-all` package.
 
+import argparse
 import re
 import sys
 import os.path
@@ -22,6 +23,7 @@ def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
+META_INF_VERSIONS = re.compile("META-INF/versions/[0-9]+/")
 def _read_jar_index(jarname):
   bypackage = dict()
   cd_file = jarname[:-6] + ".cd"
@@ -29,7 +31,10 @@ def _read_jar_index(jarname):
   for l in listzip.listzip(zip_suffix):
     if l.endswith(".class") and not utils.is_private(l):
       lpackage = os.path.dirname(l)
+      lpackage = META_INF_VERSIONS.sub("", lpackage)
       cname = os.path.basename(l)
+      if cname == "module-info.class":
+        continue
       if lpackage not in bypackage:
         bypackage[lpackage] = set()
       bypackage[lpackage].add(cname)
@@ -287,16 +292,26 @@ def adjust_output_jars(jars):
   return jars
 
 if __name__ == '__main__':
+  parser = argparse.ArgumentParser(
+                    prog='pick-best-jars.py',
+                    description='Pick the best jars to provide a given package'
+                    )
+  parser.add_argument('jar_repository_dir', help='Directory containing the jar files to consider')
+  parser.add_argument('input_file', help='File containing the packages to consider')
+  parser.add_argument('output_file', help='File to write the results to')
+  parser.add_argument('-j', '--max-workers', help='Maximum number of worker processes to use', type=int)
+  parser.add_argument('--verbose', help='Print verbose output', action='store_true')
+  parser.add_argument('--explain', help='Explain the choice of jar for the given package', action='append', default=[])
+  args = parser.parse_args()
+  jar_repository_dir = args.jar_repository_dir
+  input_file = args.input_file
+  output_file = args.output_file
+  verbose = args.verbose
+  max_workers = args.max_workers
+  explain_packages = args.explain
+  # replace '.' with '/' in package names
+  explain_packages = [p.replace('.', '/') for p in explain_packages]
 
-  jar_repository_dir = sys.argv[1]
-  input_file = sys.argv[2]
-  output_file = sys.argv[3]
-
-  verbose = any(a == "--verbose" for a in sys.argv)
-  max_workers_arg = [a for a in sys.argv if a.startswith("-j")]
-  max_workers = int(max_workers_arg[-1][2:]) if len(max_workers_arg) > 0 else None
-  explain_arg = [a for a in sys.argv if a.startswith("--explain=")]
-  explain_packages = [a[len("--explain="):] for a in explain_arg]
   if len(explain_packages) != 0:
     verbose = True
 
