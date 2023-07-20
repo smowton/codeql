@@ -23,6 +23,7 @@ def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
+META_INF_VERSIONS = re.compile("META-INF/versions/[0-9]+/")
 def _read_jar_index(jarname):
   bypackage = dict()
   cd_file = jarname[:-6] + ".cd"
@@ -30,7 +31,10 @@ def _read_jar_index(jarname):
   for l in listzip.listzip(zip_suffix):
     if l.endswith(".class") and not utils.is_private(l):
       lpackage = os.path.dirname(l)
+      lpackage = META_INF_VERSIONS.sub("", lpackage)
       cname = os.path.basename(l)
+      if cname == "module-info.class":
+        continue
       if lpackage not in bypackage:
         bypackage[lpackage] = set()
       bypackage[lpackage].add(cname)
