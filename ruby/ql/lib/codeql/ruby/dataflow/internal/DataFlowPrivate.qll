@@ -1290,10 +1290,16 @@ private import PostUpdateNodes
 
 /** A node that performs a type cast. */
 class CastNode extends Node {
-  CastNode() {
-    // ensure that all variable assignments are included in the path graph
-    this.(SsaDefinitionExtNode).getDefinitionExt() instanceof Ssa::WriteDefinition
-  }
+  CastNode() { none() }
+}
+
+/**
+ * Holds if `n` should never be skipped over in the `PathGraph` and in path
+ * explanations.
+ */
+predicate neverSkipInPathGraph(Node n) {
+  // ensure that all variable assignments are included in the path graph
+  n.(SsaDefinitionExtNode).getDefinitionExt() instanceof Ssa::WriteDefinition
 }
 
 class DataFlowExpr = CfgNodes::ExprCfgNode;
@@ -1327,9 +1333,18 @@ predicate lambdaCreation(Node creation, LambdaCallKind kind, DataFlowCallable c)
     creation.asExpr() =
       any(CfgNodes::ExprNodes::MethodCallCfgNode mc |
         c.asCallable() = mc.getBlock().getExpr() and
-        mc.getExpr().getMethodName() = ["lambda", "proc"]
+        isProcCreationCall(mc.getExpr())
       )
   )
+}
+
+/** Holds if `call` is a call to `lambda`, `proc`, or `Proc.new` */
+pragma[nomagic]
+private predicate isProcCreationCall(MethodCall call) {
+  call.getMethodName() = ["proc", "lambda"]
+  or
+  call.getMethodName() = "new" and
+  call.getReceiver().(ConstantReadAccess).getAQualifiedName() = "Proc"
 }
 
 /**
