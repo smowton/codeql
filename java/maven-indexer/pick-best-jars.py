@@ -23,7 +23,7 @@ def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
-META_INF_VERSIONS = re.compile("META-INF/versions/[0-9]+/")
+META_INF_VERSIONS = re.compile("^META-INF/versions/[0-9]+/")
 def _read_jar_index(jarname):
   bypackage = dict()
   cd_file = jarname[:-6] + ".cd"
