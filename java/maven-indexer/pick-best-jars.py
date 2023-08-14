@@ -16,6 +16,7 @@ import concurrent.futures
 import utils
 import email.utils
 import collections
+from rapidfuzz import fuzz
 
 common_prefix_score_bonus = 50
 
@@ -23,7 +24,7 @@ def read_bytes(fname):
   with open(fname, "rb") as f:
     return f.read()
 
-META_INF_VERSIONS = re.compile("META-INF/versions/[0-9]+/")
+META_INF_VERSIONS = re.compile("^META-INF/versions/[0-9]+/")
 def _read_jar_index(jarname):
   bypackage = dict()
   cd_file = jarname[:-6] + ".cd"
@@ -96,14 +97,6 @@ def get_package_score(package, universal_packages, neutral_superpackage_re):
   else:
     return -1
 
-def get_common_prefix(l1, l2):
-  i = 0
-  for (seg1, seg2) in zip(l1, l2):
-    if seg1 != seg2:
-      break
-    i += 1
-  return l1[:i]
-
 def adjust_jar_relative_name(relname, target_package):
   # HACK: treat commons-io/commons-io like org/apache/commons/commons-io, because a real jar with the latter
   # name exists but only includes older versions of that package.
@@ -150,12 +143,19 @@ def get_jar_score(jarname, jar, target_package, universal_packages, neutral_supe
     raise Exception("JAR name %s should fall within the repository directory %s" % (jarname, jar_repository_dir))
   jar_relative_name_segments = jar_relative_name.split("/")
   jar_relative_name_segments = adjust_jar_relative_name(jar_relative_name_segments, target_package)
-  target_package_segments = target_package.split("/")
-  common_prefix = get_common_prefix(jar_relative_name_segments, target_package_segments)
-  if not prefix_too_general(common_prefix):
+  artifact_name_segments = jar_relative_name_segments[:-2]
+  full_artifact_name = "/".join(artifact_name_segments)
+  org_name = "/".join(artifact_name_segments[:-1])
+  org_score = fuzz.partial_ratio(org_name, target_package)/100
+  name_score = fuzz.partial_ratio(full_artifact_name, target_package)/100
+  # the following jars are repackaged versions of other jars, so we don't want to give them a bonus; instead they receive a small penalty
+  if "apache.servicemix.bundles" in jar_relative_name or "org/wso2/orbit" in jar_relative_name:
+    result -= 1
+  elif name_score > 0.7 or org_score > 0.8:
+    name_bonus = common_prefix_score_bonus * ((org_score + name_score) / 2)
     if verbose:
-      print("BONUS: %d points because the jar name and target package %s have common prefix %s" % (common_prefix_score_bonus, target_package, "/".join(common_prefix)), file = sys.stderr)
-    result += common_prefix_score_bonus
+      print("BONUS: %d points because the jar %s and target package %s have a high similarity (org: %.2f, full name: %.2f)" % (name_bonus, jar_relative_name, target_package, org_score, name_score), file = sys.stderr)
+    result += name_bonus
 
   result += adjust_jar_score(jarname, target_package)
 
