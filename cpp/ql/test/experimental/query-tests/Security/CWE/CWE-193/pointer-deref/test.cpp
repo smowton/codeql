@@ -305,7 +305,7 @@ void test21() {
 
   for (int i = 0; i < n; i += 2) {
     xs[i] = test21_get(i); // GOOD
-    xs[i+1] = test21_get(i+1); // $ alloc=L304 alloc=L304-1 deref=L308 // GOOD [FALSE POSITIVE]
+    xs[i+1] = test21_get(i+1); // GOOD
   }
 }
 
@@ -659,7 +659,7 @@ void test32(unsigned size) {
   xs++;
   if (xs >= end)
     return;
-  xs[0] = 0; // $ deref=L656->L662+1 deref=L657->L662+1 GOOD [FALSE POSITIVE]
+  xs[0] = 0; // GOOD
 }
 
 void test33(unsigned size, unsigned src_pos)
@@ -672,7 +672,7 @@ void test33(unsigned size, unsigned src_pos)
   while (dst_pos < size - 1) {
     dst_pos++;
     if (true)
-      xs[dst_pos++] = 0; // $ alloc=L667+1 deref=L675 // GOOD [FALSE POSITIVE]
+      xs[dst_pos++] = 0; // GOOD
   }
 }
 
@@ -689,4 +689,47 @@ void test_missing_call_context_2(unsigned size) {
   int* p = new int[size];
   int* end_minus_one = pointer_arithmetic(p, size - 1);
   *end_minus_one = '0'; // $ deref=L680->L690->L691 // GOOD
+}
+
+void test34(unsigned size) {
+  char *p = new char[size];
+  char *end = p + size + 1; // $ alloc=L695
+  if (p + 1 < end) {
+    p += 1;
+  }
+  if (p + 1 < end) {
+    int val = *p; // $ deref=L698->L700->L701 // GOOD [FALSE POSITIVE]
+  }
+}
+
+void deref(char* q) {
+  char x = *q; // $ deref=L714->L705->L706 // BAD
+}
+
+void test35(unsigned long size, char* q)
+{
+  char* p = new char[size];
+  char* end = p + size; // $ alloc=L711
+  if(q <= end) {
+    deref(q);
+  }
+}
+
+void test21_simple(bool b) {
+  int n = 0;
+  if (b) n = 2;
+
+  int* xs = new int[n];
+
+  for (int i = 0; i < n; i += 2) {
+    xs[i+1] = 0; // GOOD
+  }
+}
+
+void test36(unsigned size, unsigned n) {
+  int* p = new int[size + 2];
+  if(n < size + 1) {
+    int* end = p + (n + 2); // $ alloc=L730+2
+    *end = 0; // $ deref=L733 // BAD
+  }
 }

@@ -74,7 +74,7 @@ predicate simpleLocalFlowStep = DataFlowPrivate::localFlowStepTypeTracker/2;
 /**
  * Holds if data can flow from `node1` to `node2` in a way that discards call contexts.
  */
-predicate jumpStep = DataFlowPrivate::jumpStep/2;
+predicate jumpStep = DataFlowPrivate::jumpStepTypeTracker/2;
 
 /** Holds if there is direct flow from `param` to a return. */
 pragma[nomagic]
@@ -230,7 +230,7 @@ predicate returnStep(Node nodeFrom, Node nodeTo) {
     // deliberately do not include `getInitializeTarget`, since calls to `new` should not
     // get the return value from `initialize`. Any fields being set in the initializer
     // will reach all reads via `callStep` and `localFieldStep`.
-    nodeTo.asExpr().getNode() = call.getNode()
+    nodeTo.asExpr().getAstNode() = call.getAstNode()
   )
 }
 

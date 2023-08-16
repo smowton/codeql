@@ -12,7 +12,6 @@ private import semmle.code.java.dataflow.internal.FlowSummaryImpl as FlowSummary
 private import semmle.code.java.security.ExternalAPIs as ExternalAPIs
 private import semmle.code.java.Expr as Expr
 private import semmle.code.java.security.QueryInjection
-private import semmle.code.java.security.RequestForgery
 private import semmle.code.java.dataflow.internal.ModelExclusions as ModelExclusions
 private import AutomodelJavaUtil as AutomodelJavaUtil
 private import semmle.code.java.security.PathSanitizer as PathSanitizer
@@ -22,11 +21,97 @@ import AutomodelEndpointTypes as AutomodelEndpointTypes
 
 newtype JavaRelatedLocationType = CallContext()
 
+newtype TApplicationModeEndpoint =
+  TExplicitArgument(Call call, DataFlow::Node arg) {
+    exists(Argument argExpr |
+      arg.asExpr() = argExpr and call = argExpr.getCall() and not argExpr.isVararg()
+    )
+  } or
+  TInstanceArgument(Call call, DataFlow::Node arg) { arg = DataFlow::getInstanceArgument(call) } or
+  TImplicitVarargsArray(Call call, DataFlow::Node arg, int idx) {
+    exists(Argument argExpr |
+      arg.asExpr() = argExpr and
+      call.getArgument(idx) = argExpr and
+      argExpr.isVararg() and
+      not exists(int i | i < idx and call.getArgument(i).(Argument).isVararg())
+    )
+  }
+
+/**
+ * An endpoint is a node that is a candidate for modeling.
+ */
+abstract private class ApplicationModeEndpoint extends TApplicationModeEndpoint {
+  abstract predicate isArgOf(Call c, int idx);
+
+  Call getCall() { this.isArgOf(result, _) }
+
+  int getArgIndex() { this.isArgOf(_, result) }
+
+  abstract Top asTop();
+
+  abstract DataFlow::Node asNode();
+
+  abstract string toString();
+}
+
 /**
  * A class representing nodes that are arguments to calls.
  */
-private class ArgumentNode extends DataFlow::Node {
-  ArgumentNode() { this.asExpr() = [any(Call c).getAnArgument(), any(Call c).getQualifier()] }
+class ExplicitArgument extends ApplicationModeEndpoint, TExplicitArgument {
+  Call call;
+  DataFlow::Node arg;
+
+  ExplicitArgument() { this = TExplicitArgument(call, arg) }
+
+  override predicate isArgOf(Call c, int idx) { c = call and this.asTop() = c.getArgument(idx) }
+
+  override Top asTop() { result = arg.asExpr() }
+
+  override DataFlow::Node asNode() { result = arg }
+
+  override string toString() { result = arg.toString() }
+}
+
+class InstanceArgument extends ApplicationModeEndpoint, TInstanceArgument {
+  Call call;
+  DataFlow::Node arg;
+
+  InstanceArgument() { this = TInstanceArgument(call, arg) }
+
+  override predicate isArgOf(Call c, int idx) {
+    c = call and this.asTop() = c.getQualifier() and idx = -1
+  }
+
+  override Top asTop() { if exists(arg.asExpr()) then result = arg.asExpr() else result = call }
+
+  override DataFlow::Node asNode() { result = arg }
+
+  override string toString() { result = arg.toString() }
+}
+
+/**
+ * An endpoint that represents an implicit varargs array.
+ * We choose to represent the varargs array as a single endpoint, rather than as multiple endpoints.
+ *
+ * This avoids the problem of having to deal with redundant endpoints downstream.
+ *
+ * In order to be able to distinguish between varargs endpoints and regular endpoints, we export the `isVarargsArray`
+ * meta data field in the extraction queries.
+ */
+class ImplicitVarargsArray extends ApplicationModeEndpoint, TImplicitVarargsArray {
+  Call call;
+  DataFlow::Node vararg;
+  int idx;
+
+  ImplicitVarargsArray() { this = TImplicitVarargsArray(call, vararg, idx) }
+
+  override predicate isArgOf(Call c, int i) { c = call and i = idx }
+
+  override Top asTop() { result = this.getCall() }
+
+  override DataFlow::Node asNode() { result = vararg }
+
+  override string toString() { result = vararg.toString() }
 }
 
 /**
@@ -38,7 +123,7 @@ private class ArgumentNode extends DataFlow::Node {
  */
 module ApplicationCandidatesImpl implements SharedCharacteristics::CandidateSig {
   // for documentation of the implementations here, see the QLDoc in the CandidateSig signature module.
-  class Endpoint = ArgumentNode;
+  class Endpoint = ApplicationModeEndpoint;
 
   class EndpointType = AutomodelEndpointTypes::EndpointType;
 
@@ -52,28 +137,28 @@ module ApplicationCandidatesImpl implements SharedCharacteristics::CandidateSig 
   predicate isSanitizer(Endpoint e, EndpointType t) {
     exists(t) and
     (
-      e.getType() instanceof BoxedType
+      e.asNode().getType() instanceof BoxedType
       or
-      e.getType() instanceof PrimitiveType
+      e.asNode().getType() instanceof PrimitiveType
       or
-      e.getType() instanceof NumberType
+      e.asNode().getType() instanceof NumberType
     )
     or
     t instanceof AutomodelEndpointTypes::PathInjectionSinkType and
-    e instanceof PathSanitizer::PathInjectionSanitizer
+    e.asNode() instanceof PathSanitizer::PathInjectionSanitizer
   }
 
-  RelatedLocation asLocation(Endpoint e) { result = e.asExpr() }
+  RelatedLocation asLocation(Endpoint e) { result = e.asTop() }
 
   predicate isKnownKind = AutomodelJavaUtil::isKnownKind/2;
 
-  predicate isSink(Endpoint e, string kind) {
+  predicate isSink(Endpoint e, string kind, string provenance) {
     exists(string package, string type, string name, string signature, string ext, string input |
       sinkSpec(e, package, type, name, signature, ext, input) and
-      ExternalFlow::sinkModel(package, type, _, name, [signature, ""], ext, input, kind, _)
+      ExternalFlow::sinkModel(package, type, _, name, [signature, ""], ext, input, kind, provenance)
     )
     or
-    isCustomSink(e, kind)
+    isCustomSink(e, kind) and provenance = "custom-sink"
   }
 
   predicate isNeutral(Endpoint e) {
@@ -89,16 +174,7 @@ module ApplicationCandidatesImpl implements SharedCharacteristics::CandidateSig 
     ApplicationModeGetCallable::getCallable(e).hasQualifiedName(package, type, name) and
     signature = ExternalFlow::paramsString(ApplicationModeGetCallable::getCallable(e)) and
     ext = "" and
-    (
-      exists(Call c, int argIdx |
-        e.asExpr() = c.getArgument(argIdx) and
-        input = AutomodelJavaUtil::getArgumentForIndex(argIdx)
-      )
-      or
-      exists(Call c |
-        e.asExpr() = c.getQualifier() and input = AutomodelJavaUtil::getArgumentForIndex(-1)
-      )
-    )
+    input = AutomodelJavaUtil::getArgumentForIndex(e.getArgIndex())
   }
 
   /**
@@ -109,7 +185,7 @@ module ApplicationCandidatesImpl implements SharedCharacteristics::CandidateSig 
    */
   RelatedLocation getRelatedLocation(Endpoint e, RelatedLocationType type) {
     type = CallContext() and
-    result = any(Call c | e.asExpr() = [c.getAnArgument(), c.getQualifier()])
+    result = e.getCall()
   }
 }
 
@@ -123,12 +199,7 @@ private module ApplicationModeGetCallable implements AutomodelSharedGetCallable:
   /**
    * Returns the API callable being modeled.
    */
-  Callable getCallable(Endpoint e) {
-    exists(Call c |
-      e.asExpr() = [c.getAnArgument(), c.getQualifier()] and
-      result = c.getCallee()
-    )
-  }
+  Callable getCallable(Endpoint e) { result = e.getCall().getCallee() }
 }
 
 /**
@@ -136,11 +207,7 @@ private module ApplicationModeGetCallable implements AutomodelSharedGetCallable:
  * should be empty.
  */
 private predicate isCustomSink(Endpoint e, string kind) {
-  e.asExpr() instanceof ArgumentToExec and kind = "command injection"
-  or
-  e instanceof RequestForgerySink and kind = "request forgery"
-  or
-  e instanceof QueryInjectionSink and kind = "sql"
+  e.asNode() instanceof QueryInjectionSink and kind = "sql"
 }
 
 module CharacteristicsImpl =
@@ -162,23 +229,21 @@ class ApplicationModeMetadataExtractor extends string {
 
   predicate hasMetadata(
     Endpoint e, string package, string type, string subtypes, string name, string signature,
-    string input
+    string input, string isVarargsArray
   ) {
-    exists(Call call, Callable callable, int argIdx |
-      call.getCallee() = callable and
-      (
-        e.asExpr() = call.getArgument(argIdx)
-        or
-        e.asExpr() = call.getQualifier() and argIdx = -1
-      ) and
-      input = AutomodelJavaUtil::getArgumentForIndex(argIdx) and
+    exists(Callable callable |
+      e.getCall().getCallee() = callable and
+      input = AutomodelJavaUtil::getArgumentForIndex(e.getArgIndex()) and
       package = callable.getDeclaringType().getPackage().getName() and
       // we're using the erased types because the MaD convention is to not specify type parameters.
       // Whether something is or isn't a sink doesn't usually depend on the type parameters.
       type = callable.getDeclaringType().getErasure().(RefType).nestedName() and
       subtypes = AutomodelJavaUtil::considerSubtypes(callable).toString() and
       name = callable.getName() and
-      signature = ExternalFlow::paramsString(callable)
+      signature = ExternalFlow::paramsString(callable) and
+      if e instanceof ImplicitVarargsArray
+      then isVarargsArray = "true"
+      else isVarargsArray = "false"
     )
   }
 }
@@ -200,7 +265,7 @@ private class UnexploitableIsCharacteristic extends CharacteristicsImpl::NotASin
   UnexploitableIsCharacteristic() { this = "unexploitable (is-style boolean method)" }
 
   override predicate appliesToEndpoint(Endpoint e) {
-    not ApplicationCandidatesImpl::isSink(e, _) and
+    not ApplicationCandidatesImpl::isSink(e, _, _) and
     ApplicationModeGetCallable::getCallable(e).getName().matches("is%") and
     ApplicationModeGetCallable::getCallable(e).getReturnType() instanceof BooleanType
   }
@@ -218,7 +283,7 @@ private class UnexploitableExistsCharacteristic extends CharacteristicsImpl::Not
   UnexploitableExistsCharacteristic() { this = "unexploitable (existence-checking boolean method)" }
 
   override predicate appliesToEndpoint(Endpoint e) {
-    not ApplicationCandidatesImpl::isSink(e, _) and
+    not ApplicationCandidatesImpl::isSink(e, _, _) and
     exists(Callable callable |
       callable = ApplicationModeGetCallable::getCallable(e) and
       callable.getName().toLowerCase() = ["exists", "notexists"] and
@@ -248,28 +313,10 @@ private class IsMaDTaintStepCharacteristic extends CharacteristicsImpl::NotASink
   IsMaDTaintStepCharacteristic() { this = "taint step" }
 
   override predicate appliesToEndpoint(Endpoint e) {
-    FlowSummaryImpl::Private::Steps::summaryThroughStepValue(e, _, _) or
-    FlowSummaryImpl::Private::Steps::summaryThroughStepTaint(e, _, _) or
-    FlowSummaryImpl::Private::Steps::summaryGetterStep(e, _, _, _) or
-    FlowSummaryImpl::Private::Steps::summarySetterStep(e, _, _, _)
-  }
-}
-
-/**
- * A negative characteristic that filters out qualifiers that are classes (i.e. static calls). These
- * are unlikely to have any non-trivial flow going into them.
- *
- * Technically, an accessed type _could_ come from outside of the source code, but there's not
- * much likelihood of that being user-controlled.
- */
-private class ClassQualifierCharacteristic extends CharacteristicsImpl::NotASinkCharacteristic {
-  ClassQualifierCharacteristic() { this = "class qualifier" }
-
-  override predicate appliesToEndpoint(Endpoint e) {
-    exists(Call c |
-      e.asExpr() = c.getQualifier() and
-      c.getQualifier() instanceof TypeAccess
-    )
+    FlowSummaryImpl::Private::Steps::summaryThroughStepValue(e.asNode(), _, _) or
+    FlowSummaryImpl::Private::Steps::summaryThroughStepTaint(e.asNode(), _, _) or
+    FlowSummaryImpl::Private::Steps::summaryGetterStep(e.asNode(), _, _, _) or
+    FlowSummaryImpl::Private::Steps::summarySetterStep(e.asNode(), _, _, _)
   }
 }
 
@@ -313,7 +360,8 @@ private class NonPublicMethodCharacteristic extends CharacteristicsImpl::Uninter
 
 /**
  * A negative characteristic that indicates that an endpoint is a non-sink argument to a method whose sinks have already
- * been modeled.
+ * been modeled _manually_. This is restricted to manual sinks only, because only during the manual process do we have
+ * the expectation that all sinks present in a method have been considered.
  *
  * WARNING: These endpoints should not be used as negative samples for training, because some sinks may have been missed
  * when the method was modeled. Specifically, as we start using ATM to merge in new declarations, we can be less sure
@@ -324,14 +372,14 @@ private class NonPublicMethodCharacteristic extends CharacteristicsImpl::Uninter
 private class OtherArgumentToModeledMethodCharacteristic extends CharacteristicsImpl::LikelyNotASinkCharacteristic
 {
   OtherArgumentToModeledMethodCharacteristic() {
-    this = "other argument to a method that has already been modeled"
+    this = "other argument to a method that has already been modeled manually"
   }
 
   override predicate appliesToEndpoint(Endpoint e) {
-    not ApplicationCandidatesImpl::isSink(e, _) and
-    exists(DataFlow::Node otherSink |
-      ApplicationCandidatesImpl::isSink(otherSink, _) and
-      e.asExpr() = otherSink.asExpr().(Argument).getCall().getAnArgument() and
+    not ApplicationCandidatesImpl::isSink(e, _, _) and
+    exists(Endpoint otherSink |
+      ApplicationCandidatesImpl::isSink(otherSink, _, "manual") and
+      e.getCall() = otherSink.getCall() and
       e != otherSink
     )
   }
@@ -345,7 +393,7 @@ private class OtherArgumentToModeledMethodCharacteristic extends Characteristics
 private class FunctionValueCharacteristic extends CharacteristicsImpl::LikelyNotASinkCharacteristic {
   FunctionValueCharacteristic() { this = "function value" }
 
-  override predicate appliesToEndpoint(Endpoint e) { e.asExpr() instanceof FunctionalExpr }
+  override predicate appliesToEndpoint(Endpoint e) { e.asNode().asExpr() instanceof FunctionalExpr }
 }
 
 /**
@@ -365,12 +413,12 @@ private class CannotBeTaintedCharacteristic extends CharacteristicsImpl::LikelyN
    * Holds if the node `n` is known as the predecessor in a modeled flow step.
    */
   private predicate isKnownOutNodeForStep(Endpoint e) {
-    e.asExpr() instanceof Call or // we just assume flow in that case
-    TaintTracking::localTaintStep(_, e) or
-    FlowSummaryImpl::Private::Steps::summaryThroughStepValue(_, e, _) or
-    FlowSummaryImpl::Private::Steps::summaryThroughStepTaint(_, e, _) or
-    FlowSummaryImpl::Private::Steps::summaryGetterStep(_, _, e, _) or
-    FlowSummaryImpl::Private::Steps::summarySetterStep(_, _, e, _)
+    e.asNode().asExpr() instanceof Call or // we just assume flow in that case
+    TaintTracking::localTaintStep(_, e.asNode()) or
+    FlowSummaryImpl::Private::Steps::summaryThroughStepValue(_, e.asNode(), _) or
+    FlowSummaryImpl::Private::Steps::summaryThroughStepTaint(_, e.asNode(), _) or
+    FlowSummaryImpl::Private::Steps::summaryGetterStep(_, _, e.asNode(), _) or
+    FlowSummaryImpl::Private::Steps::summarySetterStep(_, _, e.asNode(), _)
   }
 }
 
