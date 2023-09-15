@@ -75,6 +75,14 @@ def version_cmp(v1, v2):
 
     return 0
 
+# check for characters that would be invalid in file names on Windows. The groupId, artifactId, classifier, and
+# version are used by maven in the names of JAR files.
+def check_valid_filename(name):
+  for c in name:
+    if ord(c) < 32 or c in '<>:"/\\|?*':
+      return False
+  return True
+
 byver = dict()
 
 # HACK: always include at least version 3 of Mockito in addition to the overall latest version.
@@ -97,6 +105,9 @@ for l in sys.stdin:
   else:
     artifact = (u_fields[0], u_fields[1])
   version = u_fields[2]
+  if not (all(map(check_valid_filename, artifact)) and check_valid_filename(version)):
+    print("Invalid characters in maven index entry: " + l.strip(), file = sys.stderr)
+    continue
   version_parsed = version_to_tuple(version)
   major_version = None if ((not all_major_versions) or len(version_parsed) == 1) else version_parsed[0]
   major_version = adjust_major_version(artifact, version_parsed, major_version)
