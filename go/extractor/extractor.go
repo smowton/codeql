@@ -1611,7 +1611,9 @@ func extractType(tw *trap.Writer, tp types.Type) trap.Label {
 					name = ""
 				}
 				extractComponentType(tw, lbl, i, name, field.Type())
-				dbscheme.ComponentTagsTable.Emit(tw, lbl, i, tp.Tag(i))
+				if tp.Tag(i) != "" {
+					dbscheme.ComponentTagsTable.Emit(tw, lbl, i, tp.Tag(i))
+				}
 			}
 		case *types.Pointer:
 			kind = dbscheme.PointerType.Index()
@@ -1630,11 +1632,8 @@ func extractType(tw *trap.Writer, tp types.Type) trap.Label {
 
 				extractComponentType(tw, lbl, i, meth.Name(), meth.Type())
 
-				// meth.Id() will be equal to meth.Name() for an exported method, or
-				// packge-qualified otherwise.
-				privateMethodId := meth.Id()
-				if privateMethodId != meth.Name() {
-					dbscheme.InterfacePrivateMethodIdsTable.Emit(tw, lbl, i, privateMethodId)
+				if !meth.Exported() {
+					dbscheme.InterfacePrivateMethodIdsTable.Emit(tw, lbl, i, meth.Id())
 				}
 			}
 			for i := 0; i < tp.NumEmbeddeds(); i++ {
