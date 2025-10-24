@@ -359,7 +359,7 @@ def _codeql_pack_install(name, srcs, install_dest = None, build_file_label = Non
     ] + ([build_file_label] if build_file_label else [])
     args = [
         "--pkg-install-script=$(rlocationpath %s)" % internal("script"),
-        "--ripunzip=$(rlocationpath %s)" % Label("//misc/ripunzip"),
+        "--ripunzip=/usr/bin/ripunzip",
         "--zip-manifest=$(rlocationpath %s)" % internal("zip-manifest"),
     ] + ([
         "--build-file=$(rlocationpath %s)" % build_file_label,
